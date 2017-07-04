@@ -1,1 +1,1 @@
-MTT GMS group zabbix bot
+Zabbix alert bot for telegram

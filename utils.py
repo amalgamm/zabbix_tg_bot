@@ -27,9 +27,6 @@ main_menu = ["Активировать фильтр", "Деактивирова�
 def create_user(chat_id):
     for keys in r.keys("users:" + str(chat_id) + ":*"):
         r.delete(keys)
-    filters = get_all_filters()
-    for f in filters:
-        r.lpush("users:" + str(chat_id) + ":inactive", f)
 
 
 # Получаем список всех фильтров
@@ -64,20 +61,19 @@ def gen_inl_filter(type, chat_id, message_id):
     if len(filters) % 2 == 0:
         for i in range(0, len(filters), 2):
             keyboard.add(
-                types.InlineKeyboardButton(text=filters[i], callback_data='%s %s' % (filters[i], message_id)),
-                types.InlineKeyboardButton(text=filters[i + 1], callback_data='%s %s' % (filters[i + 1], message_id)))
+                types.InlineKeyboardButton(text=filters[i], callback_data='%s_%s' % (filters[i], message_id)),
+                types.InlineKeyboardButton(text=filters[i + 1], callback_data='%s_%s' % (filters[i + 1], message_id)))
     else:
         for i in range(0, len(filters) - 1, 2):
             keyboard.add(
-                types.InlineKeyboardButton(text=filters[i], callback_data='%s %s' % (filters[i], message_id)),
-                types.InlineKeyboardButton(text=filters[i + 1], callback_data='%s %s' % (filters[i + 1], message_id)))
-        keyboard.add(types.InlineKeyboardButton(text=filters[-1], callback_data='%s %s' % (filters[-1], message_id)))
+                types.InlineKeyboardButton(text=filters[i], callback_data='%s_%s' % (filters[i], message_id)),
+                types.InlineKeyboardButton(text=filters[i + 1], callback_data='%s_%s' % (filters[i + 1], message_id)))
+        keyboard.add(types.InlineKeyboardButton(text=filters[-1], callback_data='%s_%s' % (filters[-1], message_id)))
     return keyboard
 
 
 # Добавляем фильтр в активные
 def set_filter(chat_id, filter):
-    r.lrem("users:" + str(chat_id) + ":inactive", filter)
     r.lpush("users:" + str(chat_id) + ":active", filter)
     return "Фильтр " + filter + " активирован"
 
@@ -85,7 +81,6 @@ def set_filter(chat_id, filter):
 # Добавляем фильтр в неактивные
 def unset_filter(chat_id, filter):
     r.lrem("users:" + str(chat_id) + ":active", filter)
-    r.lpush("users:" + str(chat_id) + ":inactive", filter)
     return "Фильтр " + filter + " деактивирован"
 
 
@@ -100,10 +95,9 @@ def get_active_filters(chat_id):
 
 # Получаем список неактивных фильтров
 def get_inactive_filters(chat_id):
-    chk = r.keys("users:" + str(chat_id) + ':inactive')
-    if len(chk) == 0:
-        return []
-    ina_list = r.lrange("users:" + str(chat_id) + ":inactive", 0, 100)
+    active_list = get_active_filters(chat_id)
+    all_list = get_all_filters()
+    ina_list = list (set(all_list) - set(active_list))
     return ina_list
 
 
@@ -161,7 +155,7 @@ def to_buffer(filter, title, body):
 # Генерим кнопку для подробной информации об аларме
 def get_event_data(event_id, message_id):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
-    keyboard.add(types.InlineKeyboardButton(text="Подробнее", callback_data=event_id + ' ' + str(message_id)))
+    keyboard.add(types.InlineKeyboardButton(text="Подробнее", callback_data=event_id + '_' + str(message_id)))
     return keyboard
 
 

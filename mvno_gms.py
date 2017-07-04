@@ -73,9 +73,9 @@ def buttons(message):
 
 
 # Активируем или деактивируем фильтр
-@bot.callback_query_handler(func=lambda call: call.data.split(' ')[0] in utils.get_all_filters())
+@bot.callback_query_handler(func=lambda call: call.data.split('_')[0] in utils.get_all_filters())
 def control_filter(call):
-    data, message_id = call.data.split(' ')
+    data, message_id = call.data.split('_')
     reply = bot.send_message(chat_id=call.message.chat.id, text='...')
     # Если фильтр есть в неактивных, то включаем его
     if data in utils.get_inactive_filters(call.message.chat.id):
@@ -118,9 +118,9 @@ def get_stat(call):
 @bot.callback_query_handler(func=lambda call: True)
 def show_body(call):
     # Извлекаем id сообщения в zabbix
-    id = str(call.data).split(' ')[0]
+    id = str(call.data).split('_')[0]
     # Извлекаем id сообщения в телеграм
-    msg = str(call.data).split(' ')[1]
+    msg = str(call.data).split('_')[1]
     buffer = utils.from_buffer(id)
     title = buffer["time"] + '\n' + buffer["title"]
     body = buffer["body"]
