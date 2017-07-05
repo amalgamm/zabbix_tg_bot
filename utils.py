@@ -148,7 +148,7 @@ def to_buffer(filter, title, body):
     id = str(uuid.uuid4())
     r.hmset('buffer:' + filter + ":" + id, {'title': title, 'body': body, 'time': datetime.now().strftime(
         '%Y-%m-%d %H:%M:%S')})
-    r.expire('buffer:' + filter + ":" + id, 10800)
+    r.expire('buffer:' + filter + ":" + id, 86400)
     return id
 
 
@@ -165,22 +165,25 @@ def from_buffer(id):
         path = r.keys('buffer:*:' + id)
         return r.hgetall(path[0])
     except Exception:
-        return {'title': 'Ой!', 'body': 'Сообщение было удалено из буфера по таймауту', 'time': 'Более 3 часов назад'}
+        return {'title': 'Ой!', 'body': 'Сообщение было удалено из буфера по таймауту', 'time': 'Более 24 часов назад'}
 
 
 # Получаем счетчики по всем фильтрам, формируем кнопки для них
-def get_counter():
+def get_counter(offset=0,filter=''):
     counters = {}
     keyboard = types.InlineKeyboardMarkup(row_width=1)
-    buffer = r.keys('buffer:*')
-    if len(buffer) == 0:
-        return False
-    for f in buffer:
-        filter = f.split(':')[1]
-        count = len(r.keys('buffer:' + filter + ':*'))
-        counters.update({filter: count})
-    for c in counters:
-        keyboard.add(types.InlineKeyboardButton(text='%s (%s)'%(c,str(counters[c])), callback_data='stat_' + c))
+    if filter == '':
+        buffer = r.keys('buffer:*')
+        if len(buffer) == 0:
+            return False
+        for f in buffer:
+            filter = f.split(':')[1]
+            count = len(r.keys('buffer:' + filter + ':*'))
+            counters.update({filter: count-offset})
+        for c in counters:
+            keyboard.add(types.InlineKeyboardButton(text='%s (%s)'%(c,str(counters[c])), callback_data='stat_%s_%s'%(offset,c)))
+    else:
+        keyboard.add(types.InlineKeyboardButton(text='Показать еще', callback_data='stat_%s_%s' % (offset, filter)))
     return keyboard
 
 

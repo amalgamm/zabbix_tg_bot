@@ -100,18 +100,24 @@ def control_filter(call):
 # Обработка запросов на получение статистики:
 @bot.callback_query_handler(func=lambda call: call.data[:4] == 'stat')
 def get_stat(call):
-    alarms = utils.get_alarm_by_filter(call.data[5:])
+    offset = int(call.data.split('_')[1])
+    filter = call.data.split('_')[2]
+    alarms = utils.get_alarm_by_filter(filter)
     raw_alarms = []
     for a in alarms:
         id = str(a.split(':')[2])
         buffer = utils.from_buffer(id)
         buffer['id'] = id
         raw_alarms.append(buffer)
-    sorted_alarms = sorted(raw_alarms, key=itemgetter('time'))
-    for s in sorted_alarms:
+    sorted_alarms = sorted(raw_alarms, key=itemgetter('time'),reverse=True)
+    for s in reversed(sorted_alarms[offset:offset+5]):
         time = datetime.strptime(s["time"],'%Y-%m-%d %H:%M:%S')
         title = s["time"] + '\n' + s["title"]
         send_to_chat(call.message.chat.id, title, s['id'])
+    remains = len(sorted_alarms)-(offset+5)
+    if remains > 0:
+        bot.send_message(call.message.chat.id, "Осталось сообщений: %s"%(remains),reply_markup=utils.get_counter(offset+5,filter))
+
 
 
 # Обработка запросов на получение подробной информации:
