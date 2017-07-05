@@ -61,9 +61,9 @@ def buttons(message):
     elif message.text == 'История событий':
         markup = utils.get_counter()
         if markup is False:
-            text = "За последний час не произошло ни одного события"
+            text = "За последние сутки не произошло ни одного события"
         else:
-            text = 'Статистика по всем фильтрам\n'
+            text = 'Статистика по всем фильтрам за последние 24 часа:\n'
     # Если не знаем кнопки, то ничего не делаем
     else:
         text = 'Неизвестная команда'
@@ -90,12 +90,12 @@ def control_filter(call):
         text = "Некорректное имя фильтра"
         markup = None
     # Собираем сообщение и изменяем первое сообщение
-    bot.edit_message_text(chat_id=call.message.chat.id, text=text,
-                          message_id=message_id)
 
     bot.edit_message_text(chat_id=call.message.chat.id, text="Выберите фильтр",
                           message_id=reply.message_id, reply_markup=markup)
 
+    bot.edit_message_text(chat_id=call.message.chat.id, text=text,
+                          message_id=message_id)
 
 # Обработка запросов на получение статистики:
 @bot.callback_query_handler(func=lambda call: call.data[:4] == 'stat')
@@ -109,32 +109,35 @@ def get_stat(call):
         buffer = utils.from_buffer(id)
         buffer['id'] = id
         raw_alarms.append(buffer)
-    sorted_alarms = sorted(raw_alarms, key=itemgetter('time'),reverse=True)
-    for s in reversed(sorted_alarms[offset:offset+5]):
-        time = datetime.strptime(s["time"],'%Y-%m-%d %H:%M:%S')
+    sorted_alarms = sorted(raw_alarms, key=itemgetter('time'), reverse=True)
+    for s in reversed(sorted_alarms[offset:offset + 5]):
+        time = datetime.strptime(s["time"], '%Y-%m-%d %H:%M:%S')
         title = s["time"] + '\n' + s["title"]
         send_to_chat(call.message.chat.id, title, s['id'])
-    remains = len(sorted_alarms)-(offset+5)
+    remains = len(sorted_alarms) - (offset + 5)
     if remains > 0:
-        bot.send_message(call.message.chat.id, "Осталось сообщений: %s"%(remains),reply_markup=utils.get_counter(offset+5,filter))
-
+        bot.send_message(call.message.chat.id, "Осталось сообщений: %s" % (remains),
+                         reply_markup=utils.get_counter(offset + 5, filter))
 
 
 # Обработка запросов на получение подробной информации:
 @bot.callback_query_handler(func=lambda call: True)
 def show_body(call):
     # Извлекаем id сообщения в zabbix
-    id,msg,action = str(call.data).split('_')
+    id, msg, action = str(call.data).split('_')
     buffer = utils.from_buffer(id)
     title = buffer["time"] + '\n' + buffer["title"]
     body = buffer["body"]
 
     if action == 'show':
         text = title + "\n" + body
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=int(msg), text=text,reply_markup=utils.hide_event_data(id,msg))
+        bot.edit_message_text(chat_id=call.message.chat.id, message_id=int(msg), text=text,
+                              reply_markup=utils.hide_event_data(id, msg))
     if action == 'hide':
         text = title
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=int(msg), text=text,reply_markup=utils.get_event_data(id,msg))
+        bot.edit_message_text(chat_id=call.message.chat.id, message_id=int(msg), text=text,
+                              reply_markup=utils.get_event_data(id, msg))
+
 
 # Отправляем заголовок сообщения в нужный чат
 def send_to_chat(chatid, title, id):
