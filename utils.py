@@ -155,9 +155,14 @@ def to_buffer(filter, title, body):
 # Генерим кнопку для подробной информации об аларме
 def get_event_data(event_id, message_id):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
-    keyboard.add(types.InlineKeyboardButton(text="Подробнее", callback_data=event_id + '_' + str(message_id)))
+    keyboard.add(types.InlineKeyboardButton(text="Подробнее", callback_data=('%s_%s_%s')%(event_id,message_id,'show')))
     return keyboard
 
+# Генерим кнопку для скрытия информации об аларме
+def hide_event_data(event_id, message_id):
+    keyboard = types.InlineKeyboardMarkup(row_width=1)
+    keyboard.add(types.InlineKeyboardButton(text="Скрыть", callback_data=('%s_%s_%s')%(event_id,message_id,'hide')))
+    return keyboard
 
 # Получаем сообщение из буфера по id
 def from_buffer(id):

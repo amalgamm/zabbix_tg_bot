@@ -124,15 +124,17 @@ def get_stat(call):
 @bot.callback_query_handler(func=lambda call: True)
 def show_body(call):
     # Извлекаем id сообщения в zabbix
-    id = str(call.data).split('_')[0]
-    # Извлекаем id сообщения в телеграм
-    msg = str(call.data).split('_')[1]
+    id,msg,action = str(call.data).split('_')
     buffer = utils.from_buffer(id)
     title = buffer["time"] + '\n' + buffer["title"]
     body = buffer["body"]
-    text = title + "\n" + body
-    bot.edit_message_text(chat_id=call.message.chat.id, message_id=int(msg), text=text)
 
+    if action == 'show':
+        text = title + "\n" + body
+        bot.edit_message_text(chat_id=call.message.chat.id, message_id=int(msg), text=text,reply_markup=utils.hide_event_data(id,msg))
+    if action == 'hide':
+        text = title
+        bot.edit_message_text(chat_id=call.message.chat.id, message_id=int(msg), text=text,reply_markup=utils.get_event_data(id,msg))
 
 # Отправляем заголовок сообщения в нужный чат
 def send_to_chat(chatid, title, id):
