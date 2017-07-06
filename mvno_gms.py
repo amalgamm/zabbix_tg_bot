@@ -23,8 +23,18 @@ def start(message):
         return bot.send_message(message.chat.id, "Вы не имеете прав на использование бота")
     utils.toggle_mode(message.chat.id, 'track')
     bot.send_message(message.chat.id,
-                     "Перед использованием настройте фильтры\nДля входа в режим редактирования наберите /edit",
+                     "Перед использованием настройте фильтры\nДля просмотра команд наберите /help",
                      reply_markup=utils.gen_markup(utils.main_menu))
+
+
+@bot.message_handler(commands=['help'])
+def start(message):
+    if utils.is_allowed(message.chat.id) is False:
+        return bot.send_message(message.chat.id, "Вы не имеете прав на использование бота")
+    bot.send_message(message.chat.id,
+                     "/start - начать работу с ботом\n/reset - удалить все свои настройки\n"
+                     "/edit - войти в режим редактирования фильтров\n/track - войти в режим получения уведомлений\n"
+                     "/help - посмотреть список команд")
 
 
 # Ловим команду для ресета
@@ -99,7 +109,6 @@ def input_regex(message):
         text = 'Некорректное регулярное выражение, введите корректное значение'
         markup = None
     bot.send_message(message.chat.id, text, reply_markup=markup)
-
 
 
 # Работа с кнопками в режиме просмотра
