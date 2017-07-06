@@ -21,12 +21,25 @@ def start(message):
     bot.send_message(218944903, "Новый пользователь " + str(message.chat.username) + " " + str(message.chat.id))
     if utils.is_allowed(message.chat.id) is False:
         return bot.send_message(message.chat.id, "Вы не имеете прав на использование бота")
-    utils.create_user(message.chat.id)
+    utils.toggle_mode(message.chat.id, 'track')
     bot.send_message(message.chat.id, "Перед использованием настройте фильтры",
                      reply_markup=utils.gen_markup(utils.main_menu))
 
 
-@bot.message_handler(func=lambda message: True, content_types=["text"])
+# Ловим команду для ресета
+@bot.message_handler(commands=['reset'])
+def start(message):
+    print("bot started with user " + str(message.chat.username) + " " + str(message.chat.id))
+    bot.send_message(218944903, "Сброс пользователя " + str(message.chat.username) + " " + str(message.chat.id))
+    if utils.is_allowed(message.chat.id) is False:
+        return bot.send_message(message.chat.id, "Вы не имеете прав на использование бота")
+    utils.reset_user(message.chat.id)
+    bot.send_message(message.chat.id, "Перед использованием настройте фильтры",
+                     reply_markup=utils.types.ReplyKeyboardRemove)
+
+
+# Работа с кнопками в режиме просмотра
+@bot.message_handler(func=lambda message: message, content_types=["text"])
 def buttons(message):
     # Текст и кнопки по умолчанию
     markup = None
@@ -35,14 +48,14 @@ def buttons(message):
     request = bot.send_message(message.chat.id, text, reply_markup=markup)
     # Если хотим активировать фильтр
     if message.text == 'Активировать фильтр':
-        markup = utils.gen_inl_filter('get_inactive_filters', message.chat.id, request.message_id)
+        markup = utils.gen_inl_filters('get_inactive_filters', message.chat.id, request.message_id)
         if markup is None:
             text = "Нет доступных фильтров"
         else:
             text = "Выберите фильтр"
     # Если хотим деактивировать фильтр
     elif message.text == 'Деактивировать фильтр':
-        markup = utils.gen_inl_filter('get_active_filters', message.chat.id, request.message_id)
+        markup = utils.gen_inl_filters('get_active_filters', message.chat.id, request.message_id)
         if markup is None:
             text = "Нет активных фильтров"
         else:
@@ -65,6 +78,10 @@ def buttons(message):
         else:
             text = 'Статистика по всем фильтрам за последние 24 часа:\n'
     # Если не знаем кнопки, то ничего не делаем
+    elif message.text == 'Режим редактирования':
+        markup = utils.gen_inl_markup(utils.edit_menu, request.message_id)
+        utils.toggle_mode(message.chat.id, 'edit')
+        text = 'Вы вошли в режим редактирования'
     else:
         text = 'Неизвестная команда'
     # Собираем сообщение и отправляем в чат
@@ -72,19 +89,35 @@ def buttons(message):
                           message_id=request.message_id, reply_markup=markup)
 
 
+# Получаем тело фильра
+@bot.callback_query_handler(func=lambda call: (
+        call.data.split('_')[0] in utils.get_all_filters() and utils.check_mode(call.message.chat.id, 'edit')))
+def get_filter(call):
+    data, message_id = call.data.split('_')
+    reply = bot.send_message(chat_id=call.message.chat.id, text='...')
+    text = utils.get_filter(data)
+    markup = utils.gen_inl_filters('get_all_filters', call.message.chat.id, reply.message_id)
+    bot.edit_message_text(chat_id=call.message.chat.id, text="Выберите фильтр",
+                          message_id=reply.message_id, reply_markup=markup)
+
+    bot.edit_message_text(chat_id=call.message.chat.id, text=text,
+                          message_id=message_id)
+
+
 # Активируем или деактивируем фильтр
-@bot.callback_query_handler(func=lambda call: call.data.split('_')[0] in utils.get_all_filters())
+@bot.callback_query_handler(func=lambda call: (
+        call.data.split('_')[0] in utils.get_all_filters() and utils.check_mode(call.message.chat.id, 'track')))
 def control_filter(call):
     data, message_id = call.data.split('_')
     reply = bot.send_message(chat_id=call.message.chat.id, text='...')
     # Если фильтр есть в неактивных, то включаем его
     if data in utils.get_inactive_filters(call.message.chat.id):
         text = utils.set_filter(call.message.chat.id, data)
-        markup = utils.gen_inl_filter('get_inactive_filters', call.message.chat.id, reply.message_id)
+        markup = utils.gen_inl_filters('get_inactive_filters', call.message.chat.id, reply.message_id)
     # Если фильтр есть в активных, то выключаем его
     elif data in utils.get_active_filters(call.message.chat.id):
         text = utils.unset_filter(call.message.chat.id, data)
-        markup = utils.gen_inl_filter('get_active_filters', call.message.chat.id, reply.message_id)
+        markup = utils.gen_inl_filters('get_active_filters', call.message.chat.id, reply.message_id)
     # Какой-то некорректный фильтр
     else:
         text = "Некорректное имя фильтра"
@@ -97,8 +130,10 @@ def control_filter(call):
     bot.edit_message_text(chat_id=call.message.chat.id, text=text,
                           message_id=message_id)
 
+
 # Обработка запросов на получение статистики:
-@bot.callback_query_handler(func=lambda call: call.data[:4] == 'stat')
+@bot.callback_query_handler(
+    func=lambda call: (call.data[:4] == 'stat') and utils.check_mode(call.message.chat.id, 'track'))
 def get_stat(call):
     offset = int(call.data.split('_')[1])
     filter = call.data.split('_')[2]
@@ -121,7 +156,7 @@ def get_stat(call):
 
 
 # Обработка запросов на получение подробной информации:
-@bot.callback_query_handler(func=lambda call: True)
+@bot.callback_query_handler(func=lambda call: utils.check_mode(call.message.chat.id, 'track'))
 def show_body(call):
     # Извлекаем id сообщения в zabbix
     id, msg, action = str(call.data).split('_')

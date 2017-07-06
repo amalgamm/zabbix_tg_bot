@@ -20,17 +20,38 @@ r = redis.Redis(connection_pool=pool)
 
 qbus = Queue()
 
-main_menu = ["Активировать фильтр", "Деактивировать фильтр", "Активные фильтры", "История событий"]
+main_menu = ["Активировать фильтр", "Деактивировать фильтр", "Активные фильтры", "История событий",
+             "Режим редактирования"]
+edit_menu = {'Посмотреть фильтр': 'show_filters', 'Добавить фильтр': 'edit_filter',
+             'Редактировать фильтр': 'edit_filter', 'Удалить фильтр': 'delete_filter'}
 
 
-# Создаем нового пользователя
-def create_user(chat_id):
+# Сбрасываем все настройки пользователя
+def reset_user(chat_id):
     for keys in r.keys("users:" + str(chat_id) + ":*"):
         r.delete(keys)
 
 
+# Переключаем режим пользователя
+def toggle_mode(chat_id, mode):
+    r.set("users:" + str(chat_id) + ":mode", mode)
+
+
+# Проверяем режим пользователя
+def check_mode(chat_id, mode):
+    if mode == r.get("users:" + str(chat_id) + ":mode"):
+        return True
+    else:
+        return False
+
+
+# Получаем содержимое фильтра
+def get_filter(filter):
+    return r.get("filter:" + filter)
+
+
 # Получаем список всех фильтров
-def get_all_filters():
+def get_all_filters(chat_id=''):
     filters = []
     for f in r.keys("filter:*"):
         filter = f.split(':')[1]
@@ -38,38 +59,39 @@ def get_all_filters():
     return filters
 
 
+# Генерим жесткие кнопки меню
 def gen_markup(menu):
     # Формируем начальное навигационное меню
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2, selective=True)
-    if len(menu) % 2 == 0:
-        for i in range(0, len(menu), 2):
-            markup.add(menu[i], menu[i + 1])
-    else:
-        for i in range(0, len(menu) - 1, 2):
-            markup.add(menu[i], menu[i + 1])
-        markup.add(menu[-1])
+    row = []
+    for i in menu:
+        row.append(i)
+    markup.add(*row)
     return markup
 
 
-# Генерим инлайн кнопками список неактивных фильтров
-def gen_inl_filter(type, chat_id, message_id):
-    # Формируем inline кнопки для конкретного меню
-    keyboard = types.InlineKeyboardMarkup(row_width=2)
+# Генерим инлайн кнопки
+def gen_inl_markup(menu, message_id):
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    row = []
+    if isinstance(menu, dict):
+        for t, d in menu.items():
+            row.append(types.InlineKeyboardButton(text=t, callback_data='%s_%s' % (d, message_id)))
+    if isinstance(menu, list):
+        for t in menu:
+            row.append(types.InlineKeyboardButton(text=t, callback_data='%s_%s' % (t, message_id)))
+    markup.add(*row)
+
+    return markup
+
+
+# Генерим инлайн кнопками список нужных фильтров
+def gen_inl_filters(type, chat_id, message_id):
+    # Получаем кнопки, которые надо сгенерить определенному пользователю
     filters = getattr(this, type)(chat_id)
-    if filters == []:
-        return None
-    if len(filters) % 2 == 0:
-        for i in range(0, len(filters), 2):
-            keyboard.add(
-                types.InlineKeyboardButton(text=filters[i], callback_data='%s_%s' % (filters[i], message_id)),
-                types.InlineKeyboardButton(text=filters[i + 1], callback_data='%s_%s' % (filters[i + 1], message_id)))
-    else:
-        for i in range(0, len(filters) - 1, 2):
-            keyboard.add(
-                types.InlineKeyboardButton(text=filters[i], callback_data='%s_%s' % (filters[i], message_id)),
-                types.InlineKeyboardButton(text=filters[i + 1], callback_data='%s_%s' % (filters[i + 1], message_id)))
-        keyboard.add(types.InlineKeyboardButton(text=filters[-1], callback_data='%s_%s' % (filters[-1], message_id)))
-    return keyboard
+    # Генерим инлайн кнопки по списку
+    markup = gen_inl_markup(filters, message_id)
+    return markup
 
 
 # Добавляем фильтр в активные
@@ -97,7 +119,7 @@ def get_active_filters(chat_id):
 def get_inactive_filters(chat_id):
     active_list = get_active_filters(chat_id)
     all_list = get_all_filters()
-    ina_list = list (set(all_list) - set(active_list))
+    ina_list = list(set(all_list) - set(active_list))
     return ina_list
 
 
@@ -155,14 +177,17 @@ def to_buffer(filter, title, body):
 # Генерим кнопку для подробной информации об аларме
 def get_event_data(event_id, message_id):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
-    keyboard.add(types.InlineKeyboardButton(text="Подробнее", callback_data=('%s_%s_%s')%(event_id,message_id,'show')))
+    keyboard.add(
+        types.InlineKeyboardButton(text="Подробнее", callback_data=('%s_%s_%s') % (event_id, message_id, 'show')))
     return keyboard
+
 
 # Генерим кнопку для скрытия информации об аларме
 def hide_event_data(event_id, message_id):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
-    keyboard.add(types.InlineKeyboardButton(text="Скрыть", callback_data=('%s_%s_%s')%(event_id,message_id,'hide')))
+    keyboard.add(types.InlineKeyboardButton(text="Скрыть", callback_data=('%s_%s_%s') % (event_id, message_id, 'hide')))
     return keyboard
+
 
 # Получаем сообщение из буфера по id
 def from_buffer(id):
@@ -174,7 +199,7 @@ def from_buffer(id):
 
 
 # Получаем счетчики по всем фильтрам, формируем кнопки для них
-def get_counter(offset=0,filter=''):
+def get_counter(offset=0, filter=''):
     counters = {}
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     if filter == '':
@@ -184,14 +209,13 @@ def get_counter(offset=0,filter=''):
         for f in buffer:
             filter = f.split(':')[1]
             count = len(r.keys('buffer:' + filter + ':*'))
-            counters.update({filter: count-offset})
+            counters.update({filter: count - offset})
         for c in counters:
-            keyboard.add(types.InlineKeyboardButton(text='%s (%s)'%(c,str(counters[c])), callback_data='stat_%s_%s'%(offset,c)))
+            keyboard.add(types.InlineKeyboardButton(text='%s (%s)' % (c, str(counters[c])),
+                                                    callback_data='stat_%s_%s' % (offset, c)))
     else:
         keyboard.add(types.InlineKeyboardButton(text='Показать еще', callback_data='stat_%s_%s' % (offset, filter)))
     return keyboard
-
-
 
 
 def is_allowed(chatid):
