@@ -20,10 +20,8 @@ r = redis.Redis(connection_pool=pool)
 
 qbus = Queue()
 
-main_menu = ["Активировать фильтр", "Деактивировать фильтр", "Активные фильтры", "История событий",
-             "Режим редактирования"]
-edit_menu = {'Посмотреть фильтр': 'show_filters', 'Добавить фильтр': 'edit_filter',
-             'Редактировать фильтр': 'edit_filter', 'Удалить фильтр': 'delete_filter'}
+main_menu = ["Активировать фильтр", "Деактивировать фильтр", "Активные фильтры", "История событий"]
+edit_menu = ['Посмотреть фильтр', 'Добавить фильтр', 'Редактировать фильтр', 'Удалить фильтр']
 
 
 # Сбрасываем все настройки пользователя
@@ -38,11 +36,25 @@ def toggle_mode(chat_id, mode):
 
 
 # Проверяем режим пользователя
-def check_mode(chat_id, mode):
-    if mode == r.get("users:" + str(chat_id) + ":mode"):
-        return True
+def get_mode(chat_id):
+    chk = r.scan(count=10000, match="users:" + str(chat_id) + ":admin")
+    if chk[1] != []:
+        return r.get("users:" + str(chat_id) + ":mode")
     else:
+        return None
+
+
+# Проверяем имеет ли пользователь доступ в админку
+def check_admin(chat_id):
+    chk = r.scan(count=10000, match="users:" + str(chat_id) + ":admin")
+    if chk[1] == []:
         return False
+    else:
+        return True
+
+
+def show_filter(chat_id, message_id):
+    return gen_inl_filters('get_all_filters', chat_id, message_id)
 
 
 # Получаем содержимое фильтра
@@ -71,27 +83,47 @@ def gen_markup(menu):
 
 
 # Генерим инлайн кнопки
-def gen_inl_markup(menu, message_id):
+def gen_inl_markup(menu, message_id, action):
     markup = types.InlineKeyboardMarkup(row_width=2)
     row = []
     if isinstance(menu, dict):
         for t, d in menu.items():
-            row.append(types.InlineKeyboardButton(text=t, callback_data='%s_%s' % (d, message_id)))
+            print(t, d)
+            row.append(types.InlineKeyboardButton(text=t, callback_data='%s_%s_%s' % (d, message_id, action)))
     if isinstance(menu, list):
         for t in menu:
-            row.append(types.InlineKeyboardButton(text=t, callback_data='%s_%s' % (t, message_id)))
+            row.append(types.InlineKeyboardButton(text=t, callback_data='%s_%s_%s' % (t, message_id, action)))
     markup.add(*row)
 
     return markup
 
 
 # Генерим инлайн кнопками список нужных фильтров
-def gen_inl_filters(type, chat_id, message_id):
+def gen_inl_filters(type, chat_id, message_id, action='none'):
     # Получаем кнопки, которые надо сгенерить определенному пользователю
     filters = getattr(this, type)(chat_id)
     # Генерим инлайн кнопки по списку
-    markup = gen_inl_markup(filters, message_id)
+    markup = gen_inl_markup(filters, message_id, action)
     return markup
+
+
+# Удаляем фильтр из базы
+def delete_filter(filter):
+    entry = str(r.get("filter:%s" % filter))
+    r.set("deleted:%s" % filter, entry)
+    r.delete("filter:%s" % filter)
+
+
+# Изменяем фильтр
+def edit_filter(filter, regex):
+    entry = str(r.get("filter:%s" % filter))
+    r.set("edited:%s" % filter, entry)
+    r.set("filter:%s" % filter, regex)
+
+
+# Изменяем фильтр
+def create_filter(filter):
+    r.set("filter:%s" % filter, '')
 
 
 # Добавляем фильтр в активные
@@ -178,14 +210,14 @@ def to_buffer(filter, title, body):
 def get_event_data(event_id, message_id):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     keyboard.add(
-        types.InlineKeyboardButton(text="Подробнее", callback_data=('%s_%s_%s') % (event_id, message_id, 'show')))
+        types.InlineKeyboardButton(text="Подробнее", callback_data='%s_%s_%s' % (event_id, message_id, 'show')))
     return keyboard
 
 
 # Генерим кнопку для скрытия информации об аларме
 def hide_event_data(event_id, message_id):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
-    keyboard.add(types.InlineKeyboardButton(text="Скрыть", callback_data=('%s_%s_%s') % (event_id, message_id, 'hide')))
+    keyboard.add(types.InlineKeyboardButton(text="Скрыть", callback_data='%s_%s_%s' % (event_id, message_id, 'hide')))
     return keyboard
 
 
