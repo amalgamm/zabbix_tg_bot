@@ -9,7 +9,7 @@ from listener import start_listener
 from config import token
 from threading import Thread
 from operator import itemgetter
-from datetime import datetime
+import re
 
 bot = telebot.TeleBot(token, skip_pending=True, threaded=True)
 
@@ -30,7 +30,6 @@ def start(message):
 # Ловим команду для ресета
 @bot.message_handler(commands=['reset'])
 def reset(message):
-    print("bot started with %s %s" % (message.chat.username, message.chat.id))
     bot.send_message(218944903, "Сброс пользователя %s %s" % (message.chat.username, message.chat.id))
     if utils.is_allowed(message.chat.id) is False:
         return bot.send_message(message.chat.id, "Вы не имеете прав на использование бота")
@@ -43,7 +42,6 @@ def reset(message):
 # Ловим команду для входа в режим редактирования
 @bot.message_handler(func=lambda message: utils.check_admin(message.chat.id), commands=['edit'])
 def reset(message):
-    print("bot started with %s %s" % (message.chat.username, message.chat.id))
     markup = None
     bot.send_message(218944903, "Вход в режим редактирования %s %s" % (message.chat.username, message.chat.id))
     if utils.is_allowed(message.chat.id) is False:
@@ -58,7 +56,6 @@ def reset(message):
 # Ловим команду для входа в режим просмотра
 @bot.message_handler(commands=['track'])
 def reset(message):
-    print("bot started with %s %s" % (message.chat.username, message.chat.id))
     markup = None
     bot.send_message(218944903, "Вход в режим просмотра %s %s" % (message.chat.username, message.chat.id))
     if utils.is_allowed(message.chat.id) is False:
@@ -87,12 +84,22 @@ def input_regex(message):
 @bot.message_handler(func=lambda message: utils.get_mode(message.chat.id) in utils.get_all_filters(),
                      content_types=["text"])
 def input_regex(message):
-    filter = utils.get_mode(message.chat.id)
-    utils.edit_filter(filter, message.text)
-    utils.toggle_mode(message.chat.id, 'edit')
-    text = 'Фильтр %s успешно изменен' % filter
-    markup = utils.gen_markup(utils.edit_menu)
+    try:
+        re.compile(message.text)
+        is_valid = True
+    except re.error:
+        is_valid = False
+    if is_valid is True:
+        filter = utils.get_mode(message.chat.id)
+        utils.edit_filter(filter, message.text)
+        utils.toggle_mode(message.chat.id, 'edit')
+        text = 'Фильтр %s успешно изменен' % filter
+        markup = utils.gen_markup(utils.edit_menu)
+    else:
+        text = 'Некорректное регулярное выражение, введите корректное значение'
+        markup = None
     bot.send_message(message.chat.id, text, reply_markup=markup)
+
 
 
 # Работа с кнопками в режиме просмотра
@@ -215,6 +222,8 @@ def get_filter(call):
         text2 = 'Выберите фильтр для удаления'
         markup = utils.gen_inl_filters('get_all_filters', call.message.chat.id, reply.message_id, action)
     elif action == 'edit':
+        bot.send_message(218944903, "Пользователь %s %s изменил фильтр %s" % (
+            call.message.chat.username, call.message.chat.id, data))
         utils.toggle_mode(call.message.chat.id, data)
         text = "Редактирование фильтра %s" % data
         text2 = "Введите регулярное выражение"
@@ -303,6 +312,8 @@ def show_body(call):
 
 # Отправляем заголовок сообщения в нужный чат
 def send_to_chat(chatid, title, id):
+    if utils.get_mode(chatid) != 'track':
+        return
     text = title + "\n"
     first = bot.send_message(chatid, text)
     bot.edit_message_reply_markup(chat_id=chatid, message_id=first.message_id,

@@ -112,7 +112,8 @@ def delete_filter(filter):
     entry = str(r.get("filter:%s" % filter))
     r.set("deleted:%s" % filter, entry)
     r.delete("filter:%s" % filter)
-
+    for u in get_users():
+        unset_filter(u,filter)
 
 # Изменяем фильтр
 def edit_filter(filter, regex):
@@ -178,22 +179,26 @@ def get_users():
 # Обрабатываем событие
 def getAlarm(group, title, body):
     # Определяем к какой группе относится событие
-    filter = sort(title)
-    # Запмсываем в буфер, получаем идентификатор
-    id = to_buffer(filter, title, body)
-    # Для всех пользователей у кого активен фильтр отправляем сообщение
-    for user in get_users():
-        if check_filter(user, filter) is True:
-            send_to_chat(user, title, id)
+    filters = sort(title)
+    for f in filters:
+        # Запмсываем в буфер, получаем идентификатор
+        id = to_buffer(f, title, body)
+        # Для всех пользователей у кого активен фильтр отправляем сообщение
+        for user in get_users():
+            if check_filter(user, f) is True:
+                send_to_chat(user, title, id)
     return
 
 
 # Классифицируем сообщение под какой-либо шаблон
 def sort(title):
+    filters = []
     for f in get_all_filters():
         mask = r.get("filter:" + f)
         if re.match(mask, title, re.MULTILINE | re.DOTALL) is not None:
-            return f
+            filters.append(f)
+    if len(filters) > 0:
+        return filters
     return "other"
 
 
