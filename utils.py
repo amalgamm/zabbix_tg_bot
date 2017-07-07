@@ -22,7 +22,7 @@ qbus = Queue()
 
 main_menu = ["Активировать фильтр", "Деактивировать фильтр", "Активные фильтры", "История событий"]
 edit_menu = ['Посмотреть фильтр', 'Добавить фильтр', 'Редактировать фильтр', 'Удалить фильтр']
-
+cancel = ['Отмена']
 
 # Сбрасываем все настройки пользователя
 def reset_user(chat_id):
@@ -37,20 +37,19 @@ def toggle_mode(chat_id, mode):
 
 # Проверяем режим пользователя
 def get_mode(chat_id):
-    chk = r.scan(count=10000, match="users:" + str(chat_id) + ":admin")
-    if chk[1] != []:
+    try:
         return r.get("users:" + str(chat_id) + ":mode")
-    else:
+    except Exception:
         return None
 
 
 # Проверяем имеет ли пользователь доступ в админку
 def check_admin(chat_id):
-    chk = r.scan(count=10000, match="users:" + str(chat_id) + ":admin")
-    if chk[1] == []:
-        return False
-    else:
+    try:
+        r.get("users:" + str(chat_id) + ":admin")
         return True
+    except Exception:
+        return False
 
 
 def show_filter(chat_id, message_id):
@@ -70,6 +69,13 @@ def get_all_filters(chat_id=''):
         filters.append(filter)
     return filters
 
+# Получаем список всех фильтров
+def get_new_filters(chat_id=''):
+    filters = []
+    for f in r.keys("new:*"):
+        filter = f.split(':')[1]
+        filters.append(filter)
+    return filters
 
 # Генерим жесткие кнопки меню
 def gen_markup(menu):
@@ -112,6 +118,7 @@ def delete_filter(filter):
     entry = str(r.get("filter:%s" % filter))
     r.set("deleted:%s" % filter, entry)
     r.delete("filter:%s" % filter)
+    r.delete("new:%s" % filter)
     for u in get_users():
         unset_filter(u,filter)
 
@@ -125,6 +132,7 @@ def edit_filter(filter, regex):
 # Изменяем фильтр
 def create_filter(filter):
     r.set("filter:%s" % filter, '')
+    r.set("new:%s" % filter, '')
 
 
 # Добавляем фильтр в активные
@@ -199,7 +207,7 @@ def sort(title):
             filters.append(f)
     if len(filters) > 0:
         return filters
-    return "other"
+    return ["other"]
 
 
 # Записываем сообщение в буфер, получаем идентификатор сообщения

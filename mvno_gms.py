@@ -80,34 +80,48 @@ def reset(message):
 # Работа с текстом в режиме ввода имени фильтра
 @bot.message_handler(func=lambda message: utils.get_mode(message.chat.id) == 'input_name', content_types=["text"])
 def input_regex(message):
-    filter = message.text
-    if filter not in utils.get_all_filters():
-        utils.create_filter(filter)
-        utils.toggle_mode(message.chat.id, filter)
-        text = 'Введите регулярное выражение для фильтра %s' % filter
+    markup = None
+    if message.text == 'Отмена':
+        utils.toggle_mode(message.chat.id, 'edit')
+        text = 'Создание отменено'
+        markup = utils.gen_markup(utils.edit_menu)
     else:
-        text = 'Фильтр %s уже существует, выберите другое имя' % filter
-    bot.send_message(message.chat.id, text)
+        filter = message.text
+        if filter not in utils.get_all_filters():
+            utils.create_filter(filter)
+            utils.toggle_mode(message.chat.id, filter)
+            text = 'Введите регулярное выражение для фильтра %s' % filter
+        else:
+            text = 'Фильтр %s уже существует, выберите другое имя' % filter
+    bot.send_message(message.chat.id, text,reply_markup=markup)
 
 
 # Работа с текстом в режиме ввода регулярного выражения
 @bot.message_handler(func=lambda message: utils.get_mode(message.chat.id) in utils.get_all_filters(),
                      content_types=["text"])
 def input_regex(message):
-    try:
-        re.compile(message.text)
-        is_valid = True
-    except re.error:
-        is_valid = False
-    if is_valid is True:
+    if message.text == 'Отмена':
         filter = utils.get_mode(message.chat.id)
-        utils.edit_filter(filter, message.text)
         utils.toggle_mode(message.chat.id, 'edit')
-        text = 'Фильтр %s успешно изменен' % filter
+        if filter in utils.get_new_filters():
+            utils.delete_filter(filter)
+        text = 'Изменение отменено'
         markup = utils.gen_markup(utils.edit_menu)
     else:
-        text = 'Некорректное регулярное выражение, введите корректное значение'
-        markup = None
+        try:
+            re.compile(message.text)
+            is_valid = True
+        except re.error:
+            is_valid = False
+        if is_valid is True:
+            filter = utils.get_mode(message.chat.id)
+            utils.edit_filter(filter, message.text)
+            utils.toggle_mode(message.chat.id, 'edit')
+            text = 'Фильтр %s успешно изменен' % filter
+            markup = utils.gen_markup(utils.edit_menu)
+        else:
+            text = 'Некорректное регулярное выражение, введите корректное значение'
+            markup = None
     bot.send_message(message.chat.id, text, reply_markup=markup)
 
 
@@ -130,7 +144,6 @@ def buttons(message):
     # Если хотим деактивировать фильтр
     elif message.text == 'Добавить фильтр':
         utils.toggle_mode(message.chat.id, 'input_name')
-        markup = None
         text = "Cоздание нового фильтра"
         text2 = "Введите имя фильтра"
 
@@ -157,7 +170,9 @@ def buttons(message):
     bot.edit_message_text(chat_id=request.chat.id, text=text.format(text),
                           message_id=request.message_id, reply_markup=markup)
     if message.text == 'Добавить фильтр':
-        bot.send_message(message.chat.id, text=text2, reply_markup=utils.types.ReplyKeyboardRemove())
+        bot.send_message(message.chat.id, text=text2, reply_markup=utils.gen_markup(utils.cancel))
+
+    # Работа с кнопками в режиме просмотра
 
 
 # Работа с кнопками в режиме просмотра
@@ -175,6 +190,7 @@ def buttons(message):
             text = "Нет доступных фильтров"
         else:
             text = "Выберите фильтр"
+
 
     # Если хотим деактивировать фильтр
     elif message.text == 'Деактивировать фильтр':
@@ -234,7 +250,7 @@ def get_filter(call):
         bot.send_message(218944903, "Пользователь %s %s изменил фильтр %s" % (
             call.message.chat.username, call.message.chat.id, data))
         utils.toggle_mode(call.message.chat.id, data)
-        text = "Редактирование фильтра %s" % data
+        text = "Редактирование фильтра %s\nТекущее значение:\n%s" % (data,utils.get_filter(data))
         text2 = "Введите регулярное выражение"
 
     if action in ['show', 'delete']:
@@ -246,7 +262,7 @@ def get_filter(call):
     elif action == "edit":
         bot.edit_message_text(chat_id=call.message.chat.id, text=text,
                               message_id=reply.message_id, reply_markup=markup)
-        bot.send_message(call.message.chat.id, text=text2, reply_markup=utils.types.ReplyKeyboardRemove())
+        bot.send_message(call.message.chat.id, text=text2, reply_markup=utils.gen_markup(utils.cancel))
 
 
 # Активируем или деактивируем фильтр
