@@ -24,6 +24,7 @@ main_menu = ["Активировать фильтр", "Деактивирова�
 edit_menu = ['Посмотреть фильтр', 'Добавить фильтр', 'Редактировать фильтр', 'Удалить фильтр']
 cancel = ['Отмена']
 
+
 # Сбрасываем все настройки пользователя
 def reset_user(chat_id):
     for keys in r.keys("users:" + str(chat_id) + ":*"):
@@ -45,10 +46,9 @@ def get_mode(chat_id):
 
 # Проверяем имеет ли пользователь доступ в админку
 def check_admin(chat_id):
-    try:
-        r.get("users:" + str(chat_id) + ":admin")
+    if str(chat_id) in r.lrange('adminlist', 0, -1):
         return True
-    except Exception:
+    else:
         return False
 
 
@@ -69,6 +69,7 @@ def get_all_filters(chat_id=''):
         filters.append(filter)
     return filters
 
+
 # Получаем список всех фильтров
 def get_new_filters(chat_id=''):
     filters = []
@@ -76,6 +77,7 @@ def get_new_filters(chat_id=''):
         filter = f.split(':')[1]
         filters.append(filter)
     return filters
+
 
 # Генерим жесткие кнопки меню
 def gen_markup(menu):
@@ -115,12 +117,16 @@ def gen_inl_filters(type, chat_id, message_id, action='none'):
 
 # Удаляем фильтр из базы
 def delete_filter(filter):
-    entry = str(r.get("filter:%s" % filter))
-    r.set("deleted:%s" % filter, entry)
-    r.delete("filter:%s" % filter)
-    r.delete("new:%s" % filter)
-    for u in get_users():
-        unset_filter(u,filter)
+    if filter in get_new_filters():
+        r.delete("new:%s" % filter)
+    else:
+        entry = str(r.get("filter:%s" % filter))
+        r.set("deleted:%s" % filter, entry)
+        r.delete("filter:%s" % filter)
+        r.delete("new:%s" % filter)
+        for u in get_users():
+            unset_filter(u, filter)
+
 
 # Изменяем фильтр
 def edit_filter(filter, regex):

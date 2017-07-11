@@ -93,7 +93,7 @@ def input_regex(message):
             text = 'Введите регулярное выражение для фильтра %s' % filter
         else:
             text = 'Фильтр %s уже существует, выберите другое имя' % filter
-    bot.send_message(message.chat.id, text,reply_markup=markup)
+    bot.send_message(message.chat.id, text, reply_markup=markup)
 
 
 # Работа с текстом в режиме ввода регулярного выражения
@@ -118,6 +118,7 @@ def input_regex(message):
             utils.edit_filter(filter, message.text)
             utils.toggle_mode(message.chat.id, 'edit')
             text = 'Фильтр %s успешно изменен' % filter
+            utils.delete_filter(filter)
             markup = utils.gen_markup(utils.edit_menu)
         else:
             text = 'Некорректное регулярное выражение, введите корректное значение'
@@ -172,7 +173,7 @@ def buttons(message):
     if message.text == 'Добавить фильтр':
         bot.send_message(message.chat.id, text=text2, reply_markup=utils.gen_markup(utils.cancel))
 
-    # Работа с кнопками в режиме просмотра
+        # Работа с кнопками в режиме просмотра
 
 
 # Работа с кнопками в режиме просмотра
@@ -250,7 +251,7 @@ def get_filter(call):
         bot.send_message(218944903, "Пользователь %s %s изменил фильтр %s" % (
             call.message.chat.username, call.message.chat.id, data))
         utils.toggle_mode(call.message.chat.id, data)
-        text = "Редактирование фильтра %s\nТекущее значение:\n%s" % (data,utils.get_filter(data))
+        text = "Редактирование фильтра %s\nТекущее значение:\n%s" % (data, utils.get_filter(data))
         text2 = "Введите регулярное выражение"
 
     if action in ['show', 'delete']:
