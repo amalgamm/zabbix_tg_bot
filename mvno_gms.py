@@ -358,8 +358,11 @@ def start_telebot():
 
 def queue_check():
     while True:
-        msg = utils.qbus.get()
-        utils.getAlarm(msg[0], msg[1], msg[2])
+        try:
+            msg = utils.qbus.get()
+            utils.getAlarm(msg[0], msg[1], msg[2])
+        except Exception:
+            continue
 
 
 # Стартуем 2 потока: для поллинга и json-rpc сервер.
