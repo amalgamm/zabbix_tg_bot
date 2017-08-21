@@ -18,9 +18,6 @@ bot = telebot.TeleBot(token, skip_pending=True, threaded=True)
 @bot.message_handler(commands=['start'])
 def start(message):
     print("bot started with %s %s" % (message.chat.username, message.chat.id))
-    bot.send_message(218944903, "Новый пользователь %s %s" % (message.chat.username, message.chat.id))
-    if utils.is_allowed(message.chat.id) is False:
-        return bot.send_message(message.chat.id, "Вы не имеете прав на использование бота")
     utils.toggle_mode(message.chat.id, 'track')
     bot.send_message(message.chat.id,
                      "Перед использованием настройте фильтры\nДля просмотра команд наберите /help",
@@ -29,8 +26,6 @@ def start(message):
 
 @bot.message_handler(commands=['help'])
 def start(message):
-    if utils.is_allowed(message.chat.id) is False:
-        return bot.send_message(message.chat.id, "Вы не имеете прав на использование бота")
     bot.send_message(message.chat.id,
                      "/start - начать работу с ботом\n/reset - удалить все свои настройки\n"
                      "/edit - войти в режим редактирования фильтров\n/track - войти в режим получения уведомлений\n"
@@ -40,9 +35,6 @@ def start(message):
 # Ловим команду для ресета
 @bot.message_handler(commands=['reset'])
 def reset(message):
-    bot.send_message(218944903, "Сброс пользователя %s %s" % (message.chat.username, message.chat.id))
-    if utils.is_allowed(message.chat.id) is False:
-        return bot.send_message(message.chat.id, "Вы не имеете прав на использование бота")
     utils.reset_user(message.chat.id)
     bot.send_message(message.chat.id,
                      "Перед использованием настройте фильтры\nДля входа в режим редактирования наберите /edit",
@@ -50,16 +42,12 @@ def reset(message):
 
 
 # Ловим команду для входа в режим редактирования
-@bot.message_handler(func=lambda message: utils.check_admin(message.chat.id), commands=['edit'])
+@bot.message_handler(commands=['edit'])
 def reset(message):
     markup = None
-    bot.send_message(218944903, "Вход в режим редактирования %s %s" % (message.chat.username, message.chat.id))
-    if utils.is_allowed(message.chat.id) is False:
-        text = "Вы не имеете прав на использование бота"
-    else:
-        markup = utils.gen_markup(utils.edit_menu)
-        utils.toggle_mode(message.chat.id, 'edit')
-        text = 'Вы вошли в режим редактирования\nДля возврата в режим просмотра наберите /track'
+    markup = utils.gen_markup(utils.edit_menu)
+    utils.toggle_mode(message.chat.id, 'edit')
+    text = 'Вы вошли в режим редактирования\nДля возврата в режим просмотра наберите /track'
     bot.send_message(message.chat.id, text, reply_markup=markup)
 
 
@@ -67,13 +55,9 @@ def reset(message):
 @bot.message_handler(commands=['track'])
 def reset(message):
     markup = None
-    bot.send_message(218944903, "Вход в режим просмотра %s %s" % (message.chat.username, message.chat.id))
-    if utils.is_allowed(message.chat.id) is False:
-        text = "Вы не имеете прав на использование бота"
-    else:
-        markup = utils.gen_markup(utils.main_menu)
-        utils.toggle_mode(message.chat.id, 'track')
-        text = 'Вы вошли в режим просмотра\nДля входа в режим редактирования наберите /edit'
+    markup = utils.gen_markup(utils.main_menu)
+    utils.toggle_mode(message.chat.id, 'track')
+    text = 'Вы вошли в режим просмотра\nДля входа в режим редактирования наберите /edit'
     bot.send_message(message.chat.id, text, reply_markup=markup)
 
 
@@ -87,8 +71,8 @@ def input_regex(message):
         markup = utils.gen_markup(utils.edit_menu)
     else:
         filter = message.text
-        if filter not in utils.get_all_filters():
-            utils.create_filter(filter)
+        if filter not in utils.get_all_filters(message.chat.id):
+            utils.create_filter(message.chat.id, filter)
             utils.toggle_mode(message.chat.id, filter)
             text = 'Введите регулярное выражение для фильтра %s' % filter
         else:
@@ -97,14 +81,14 @@ def input_regex(message):
 
 
 # Работа с текстом в режиме ввода регулярного выражения
-@bot.message_handler(func=lambda message: utils.get_mode(message.chat.id) in utils.get_all_filters(),
+@bot.message_handler(func=lambda message: utils.get_mode(message.chat.id) in utils.get_all_filters(message.chat.id),
                      content_types=["text"])
 def input_regex(message):
     if message.text == 'Отмена':
         filter = utils.get_mode(message.chat.id)
         utils.toggle_mode(message.chat.id, 'edit')
         if filter in utils.get_new_filters():
-            utils.delete_filter(filter)
+            utils.delete_filter(message.chat.id, filter)
         text = 'Изменение отменено'
         markup = utils.gen_markup(utils.edit_menu)
     else:
@@ -115,10 +99,11 @@ def input_regex(message):
             is_valid = False
         if is_valid is True:
             filter = utils.get_mode(message.chat.id)
-            utils.edit_filter(filter, message.text)
+            utils.edit_filter(message.chat.id, filter, message.text)
             utils.toggle_mode(message.chat.id, 'edit')
+            if filter in utils.get_new_filters(message.chat.id):
+                utils.delete_filter(message.chat.id, filter)
             text = 'Фильтр %s успешно изменен' % filter
-            utils.delete_filter(filter)
             markup = utils.gen_markup(utils.edit_menu)
         else:
             text = 'Некорректное регулярное выражение, введите корректное значение'
@@ -213,7 +198,7 @@ def buttons(message):
 
     # Если хотим посмотреть историю событий
     elif message.text == 'История событий':
-        markup = utils.get_counter()
+        markup = utils.get_counter(message.chat.id)
         if markup is False:
             text = "За последние сутки не произошло ни одного события"
         else:
@@ -229,7 +214,8 @@ def buttons(message):
 
 # Получаем тело фильра
 @bot.callback_query_handler(func=lambda call: (
-        call.data.split('_')[0] in utils.get_all_filters() and utils.get_mode(call.message.chat.id) == 'edit'))
+        call.data.split('_')[0] in utils.get_all_filters(call.message.chat.id) and utils.get_mode(
+            call.message.chat.id) == 'edit'))
 def get_filter(call):
     data, message_id, action = call.data.split('_')
     text = '...'
@@ -237,21 +223,17 @@ def get_filter(call):
     markup = None
     reply = bot.send_message(chat_id=call.message.chat.id, text='...')
     if action == 'show':
-        text = "Фильтр %s:\n%s" % (data, utils.get_filter(data))
+        text = "Фильтр %s:\n%s" % (data, utils.get_filter(call.message.chat.id, data))
         text2 = 'Выберите фильтр для просмотра'
         markup = utils.gen_inl_filters('get_all_filters', call.message.chat.id, reply.message_id, action)
     elif action == 'delete':
-        bot.send_message(218944903, "Пользователь %s %s удалил фильтр %s" % (
-            call.message.chat.username, call.message.chat.id, data))
-        utils.delete_filter(data)
+        utils.delete_filter(call.message.chat.id, data)
         text = "Фильтр %s удален" % data
         text2 = 'Выберите фильтр для удаления'
         markup = utils.gen_inl_filters('get_all_filters', call.message.chat.id, reply.message_id, action)
     elif action == 'edit':
-        bot.send_message(218944903, "Пользователь %s %s изменил фильтр %s" % (
-            call.message.chat.username, call.message.chat.id, data))
         utils.toggle_mode(call.message.chat.id, data)
-        text = "Редактирование фильтра %s\nТекущее значение:\n%s" % (data, utils.get_filter(data))
+        text = "Редактирование фильтра %s\nТекущее значение:\n%s" % (data, utils.get_filter(call.message.chat.id, data))
         text2 = "Введите регулярное выражение"
 
     if action in ['show', 'delete']:
@@ -268,7 +250,8 @@ def get_filter(call):
 
 # Активируем или деактивируем фильтр
 @bot.callback_query_handler(func=lambda call: (
-        call.data.split('_')[0] in utils.get_all_filters() and utils.get_mode(call.message.chat.id) == 'track'))
+        call.data.split('_')[0] in utils.get_all_filters(call.message.chat.id) and utils.get_mode(
+            call.message.chat.id) == 'track'))
 def control_filter(call):
     data, message_id, action = call.data.split('_')
     reply = bot.send_message(chat_id=call.message.chat.id, text='...')
@@ -299,11 +282,11 @@ def control_filter(call):
 def get_stat(call):
     offset = int(call.data.split('_')[1])
     filter = call.data.split('_')[2]
-    alarms = utils.get_alarm_by_filter(filter)
+    alarms = utils.get_alarm_by_filter(call.message.chat.id, filter)
     raw_alarms = []
     for a in alarms:
-        id = str(a.split(':')[2])
-        buffer = utils.from_buffer(id)
+        id = str(a.split(':')[3])
+        buffer = utils.from_buffer(call.message.chat.id, id)
         buffer['id'] = id
         raw_alarms.append(buffer)
     sorted_alarms = sorted(raw_alarms, key=itemgetter('time'), reverse=True)
@@ -322,7 +305,7 @@ def get_stat(call):
 def show_body(call):
     # Извлекаем id сообщения в zabbix
     id, msg, action = str(call.data).split('_')
-    buffer = utils.from_buffer(id)
+    buffer = utils.from_buffer(call.message.chat.id, id)
     title = buffer["time"] + '\n' + buffer["title"]
     body = buffer["body"]
 

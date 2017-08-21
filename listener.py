@@ -10,8 +10,8 @@ from config import listen_port, listen_int
 
 
 @dispatcher.add_method
-def sendAlarm(group='Empty group', title='Empty title', body='Empty body'):
-    msg = [group, title, body]
+def sendAlarm(chat_id='Empty chat_id', title='Empty title', body='Empty body'):
+    msg = [chat_id, title, body]
     logging.warning((msg))
     utils.qbus.put(msg)
     return "OK"

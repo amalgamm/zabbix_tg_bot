@@ -44,28 +44,20 @@ def get_mode(chat_id):
         return None
 
 
-# Проверяем имеет ли пользователь доступ в админку
-def check_admin(chat_id):
-    if str(chat_id) in r.lrange('adminlist', 0, -1):
-        return True
-    else:
-        return False
-
-
 def show_filter(chat_id, message_id):
     return gen_inl_filters('get_all_filters', chat_id, message_id)
 
 
 # Получаем содержимое фильтра
-def get_filter(filter):
-    return r.get("filter:" + filter)
+def get_filter(chat_id, filter):
+    return r.get("filter:%s:%s" % (chat_id, filter))
 
 
 # Получаем список всех фильтров
 def get_all_filters(chat_id=''):
     filters = []
-    for f in r.keys("filter:*"):
-        filter = f.split(':')[1]
+    for f in r.keys("filter:%s:*" % chat_id):
+        filter = f.split(':')[2]
         filters.append(filter)
     return filters
 
@@ -73,8 +65,8 @@ def get_all_filters(chat_id=''):
 # Получаем список всех фильтров
 def get_new_filters(chat_id=''):
     filters = []
-    for f in r.keys("new:*"):
-        filter = f.split(':')[1]
+    for f in r.keys("new:%s:*" % chat_id):
+        filter = f.split(':')[2]
         filters.append(filter)
     return filters
 
@@ -101,6 +93,8 @@ def gen_inl_markup(menu, message_id, action):
     if isinstance(menu, list):
         for t in menu:
             row.append(types.InlineKeyboardButton(text=t, callback_data='%s_%s_%s' % (t, message_id, action)))
+    if len(row) == 0:
+        return None
     markup.add(*row)
 
     return markup
@@ -116,29 +110,28 @@ def gen_inl_filters(type, chat_id, message_id, action='none'):
 
 
 # Удаляем фильтр из базы
-def delete_filter(filter):
-    if filter in get_new_filters():
-        r.delete("new:%s" % filter)
+def delete_filter(chat_id, filter):
+    if filter in get_new_filters(chat_id):
+        r.delete("new:%s:%s" % (chat_id, filter))
     else:
-        entry = str(r.get("filter:%s" % filter))
-        r.set("deleted:%s" % filter, entry)
-        r.delete("filter:%s" % filter)
-        r.delete("new:%s" % filter)
-        for u in get_users():
-            unset_filter(u, filter)
+        entry = str(r.get("filter:%s:%s" % (chat_id, filter)))
+        r.set("deleted:%s:%s" % (chat_id, filter), entry)
+        r.delete("filter:%s:%s" % (chat_id, filter))
+        r.delete("new:%s:%s" % (chat_id, filter))
+        unset_filter(chat_id, filter)
 
 
 # Изменяем фильтр
-def edit_filter(filter, regex):
-    entry = str(r.get("filter:%s" % filter))
-    r.set("edited:%s" % filter, entry)
-    r.set("filter:%s" % filter, regex)
+def edit_filter(chat_id, filter, regex):
+    entry = str(r.get("filter:%s:%s" % (chat_id, filter)))
+    r.set("edited:%s:%s" % (chat_id, filter), entry)
+    r.set("filter:%s:%s" % (chat_id, filter), regex)
 
 
-# Изменяем фильтр
-def create_filter(filter):
-    r.set("filter:%s" % filter, '')
-    r.set("new:%s" % filter, '')
+# Создаем фильтрр
+def create_filter(chat_id, filter):
+    r.set("filter:%s:%s" % (chat_id, filter), '')
+    r.set("new:%s:%s" % (chat_id, filter), '')
 
 
 # Добавляем фильтр в активные
@@ -165,7 +158,7 @@ def get_active_filters(chat_id):
 # Получаем список неактивных фильтров
 def get_inactive_filters(chat_id):
     active_list = get_active_filters(chat_id)
-    all_list = get_all_filters()
+    all_list = get_all_filters(chat_id)
     ina_list = list(set(all_list) - set(active_list))
     return ina_list
 
@@ -191,12 +184,12 @@ def get_users():
 
 
 # Обрабатываем событие
-def getAlarm(group, title, body):
+def getAlarm(chat_id, title, body):
     # Определяем к какой группе относится событие
-    filters = sort(title)
+    filters = sort(chat_id, title)
     for f in filters:
         # Запмсываем в буфер, получаем идентификатор
-        id = to_buffer(f, title, body)
+        id = to_buffer(chat_id, f, title, body)
         # Для всех пользователей у кого активен фильтр отправляем сообщение
         for user in get_users():
             if check_filter(user, f) is True:
@@ -205,10 +198,10 @@ def getAlarm(group, title, body):
 
 
 # Классифицируем сообщение под какой-либо шаблон
-def sort(title):
+def sort(chat_id, title):
     filters = []
-    for f in get_all_filters():
-        mask = r.get("filter:" + f)
+    for f in get_all_filters(chat_id):
+        mask = r.get("filter:%s:%s" % (chat_id, f))
         if re.match(mask, title, re.MULTILINE | re.DOTALL) is not None:
             filters.append(f)
     if len(filters) > 0:
@@ -217,11 +210,11 @@ def sort(title):
 
 
 # Записываем сообщение в буфер, получаем идентификатор сообщения
-def to_buffer(filter, title, body):
+def to_buffer(chat_id, filter, title, body):
     id = str(uuid.uuid4())
-    r.hmset('buffer:' + filter + ":" + id, {'title': title, 'body': body, 'time': datetime.now().strftime(
+    r.hmset('buffer:%s:%s:%s' % (chat_id, filter, id), {'title': title, 'body': body, 'time': datetime.now().strftime(
         '%Y-%m-%d %H:%M:%S')})
-    r.expire('buffer:' + filter + ":" + id, 86400)
+    r.expire('buffer:%s:%s:%s' % (chat_id, filter, id), 86400)
     return id
 
 
@@ -229,37 +222,40 @@ def to_buffer(filter, title, body):
 def get_event_data(event_id, message_id):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     keyboard.add(
-        types.InlineKeyboardButton(text="Подробнее", callback_data='%s_%s_%s' % (event_id, message_id, 'show')))
+        types.InlineKeyboardButton(text="Подробнее",
+                                   callback_data='%s_%s_%s' % (event_id, message_id, 'show')))
     return keyboard
 
 
 # Генерим кнопку для скрытия информации об аларме
 def hide_event_data(event_id, message_id):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
-    keyboard.add(types.InlineKeyboardButton(text="Скрыть", callback_data='%s_%s_%s' % (event_id, message_id, 'hide')))
+    keyboard.add(
+        types.InlineKeyboardButton(text="Скрыть",
+                                   callback_data='%s_%s_%s' % (event_id, message_id, 'hide')))
     return keyboard
 
 
 # Получаем сообщение из буфера по id
-def from_buffer(id):
+def from_buffer(chat_id, id):
     try:
-        path = r.keys('buffer:*:' + id)
+        path = r.keys('buffer:%s:*:%s' % (chat_id, id))
         return r.hgetall(path[0])
     except Exception:
         return {'title': 'Ой!', 'body': 'Сообщение было удалено из буфера по таймауту', 'time': 'Более 24 часов назад'}
 
 
 # Получаем счетчики по всем фильтрам, формируем кнопки для них
-def get_counter(offset=0, filter=''):
+def get_counter(chat_id, offset=0, filter=''):
     counters = {}
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     if filter == '':
-        buffer = r.keys('buffer:*')
+        buffer = r.keys('buffer:%s*' % chat_id)
         if len(buffer) == 0:
             return False
         for f in buffer:
-            filter = f.split(':')[1]
-            count = len(r.keys('buffer:' + filter + ':*'))
+            filter = f.split(':')[2]
+            count = len(r.keys('buffer:%s:%s:*' % (chat_id, filter)))
             counters.update({filter: count - offset})
         for c in counters:
             keyboard.add(types.InlineKeyboardButton(text='%s (%s)' % (c, str(counters[c])),
@@ -269,12 +265,5 @@ def get_counter(offset=0, filter=''):
     return keyboard
 
 
-def is_allowed(chatid):
-    if str(chatid) in r.lrange('whitelist', 0, -1):
-        return True
-    else:
-        return False
-
-
-def get_alarm_by_filter(filter):
-    return r.keys('buffer:' + filter + ':*')
+def get_alarm_by_filter(chat_id, filter):
+    return r.keys('buffer:%s:%s:*' % (chat_id, filter))
