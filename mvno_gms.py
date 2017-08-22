@@ -88,7 +88,7 @@ def input_regex(message):
         filter = utils.get_mode(message.chat.id)
         utils.toggle_mode(message.chat.id, 'edit')
         if filter in utils.get_new_filters(message.chat.id):
-            utils.delete_filter(message.chat.id, filter)
+            utils.delete_filter(message.chat.id, filter, 'canceled')
         text = 'Изменение отменено'
         markup = utils.gen_markup(utils.edit_menu)
     else:
@@ -102,7 +102,7 @@ def input_regex(message):
             utils.edit_filter(message.chat.id, filter, message.text)
             utils.toggle_mode(message.chat.id, 'edit')
             if filter in utils.get_new_filters(message.chat.id):
-                utils.delete_filter(message.chat.id, filter)
+                utils.delete_filter(message.chat.id, filter, 'new')
                 text = 'Фильтр %s успешно создан' % filter
             else:
                 text = 'Фильтр %s успешно изменен' % filter
@@ -229,7 +229,7 @@ def get_filter(call):
         text2 = 'Выберите фильтр для просмотра'
         markup = utils.gen_inl_filters('get_all_filters', call.message.chat.id, reply.message_id, action)
     elif action == 'delete':
-        utils.delete_filter(call.message.chat.id, data)
+        utils.delete_filter(call.message.chat.id, data, 'purged')
         text = "Фильтр %s удален" % data
         text2 = 'Выберите фильтр для удаления'
         markup = utils.gen_inl_filters('get_all_filters', call.message.chat.id, reply.message_id, action)

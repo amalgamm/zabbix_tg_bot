@@ -112,10 +112,12 @@ def gen_inl_filters(type, chat_id, message_id, action='none'):
 
 
 # Удаляем фильтр из базы
-def delete_filter(chat_id, filter):
-    if filter in get_new_filters(chat_id):
+def delete_filter(chat_id, filter, category):
+    if category == 'canceled':
         r.delete("new:%s:%s" % (chat_id, filter))
         r.delete("filter:%s:%s" % (chat_id, filter))
+    elif category == 'new':
+        r.delete("new:%s:%s" % (chat_id, filter))
     else:
         entry = str(r.get("filter:%s:%s" % (chat_id, filter)))
         r.set("deleted:%s:%s" % (chat_id, filter), entry)
@@ -197,9 +199,9 @@ def getAlarm(chat_id, title, body):
         # Запмсываем в буфер, получаем идентификатор
         id = to_buffer(chat_id, f, title, body)
         # Для всех пользователей у кого активен фильтр отправляем сообщение
-        for user in get_users():
-            if check_filter(user, f) is True:
-                send_to_chat(user, title, id)
+        # for user in get_users():
+        # if check_filter(user, f) is True:
+        # send_to_chat(user, title, id)
     return
 
 
