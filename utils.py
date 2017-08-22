@@ -9,7 +9,7 @@ import sys
 from queue import Queue
 from config import redis_db, redis_server
 from telebot import types
-from mvno_gms import send_to_chat
+from app import send_to_chat
 import json
 from datetime import datetime
 
