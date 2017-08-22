@@ -74,7 +74,7 @@ def input_regex(message):
         if filter not in utils.get_all_filters(message.chat.id):
             utils.create_filter(message.chat.id, filter)
             utils.toggle_mode(message.chat.id, filter)
-            text = 'Введите регулярное выражение для фильтра %s' % filter
+            text = 'Введите регулярное выражение для фильтра %s\nhttp://www.exlab.net/files/tools/sheets/regexp/regexp.pdf' % filter
         else:
             text = 'Фильтр %s уже существует, выберите другое имя' % filter
     bot.send_message(message.chat.id, text, reply_markup=markup)
