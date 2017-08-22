@@ -10,6 +10,7 @@ from config import token
 from threading import Thread
 from operator import itemgetter
 import re
+import json
 
 bot = telebot.TeleBot(token, skip_pending=True, threaded=True)
 
@@ -21,7 +22,7 @@ def start(message):
     utils.toggle_mode(message.chat.id, 'track')
 
     bot.send_message(message.chat.id,
-                     "Ваш ID %s\nПеред использованием настройте фильтры\nДля просмотра доступных команд наберите /help"%message.chat.id,
+                     "Ваш ID %s\nПеред использованием настройте фильтры\nДля просмотра доступных команд наберите /help" % message.chat.id,
                      reply_markup=utils.gen_markup(utils.main_menu))
 
 
@@ -114,12 +115,32 @@ def input_regex(message):
     bot.send_message(message.chat.id, text, reply_markup=markup)
 
 
+# Работа с текстом в режиме импорта фильтров
+@bot.message_handler(func=lambda message: utils.get_mode(message.chat.id) == 'import', content_types=["text"])
+def input_regex(message):
+    markup = utils.gen_markup(utils.edit_menu)
+    if message.text == 'Отмена':
+        utils.toggle_mode(message.chat.id, 'edit')
+        text = 'Импорт отменен'
+        markup = utils.gen_markup(utils.edit_menu)
+    else:
+        import_data = message.text
+        result = utils.import_filter(message.chat.id, import_data)
+        text = "Статус операции импорта по фильтрам:\n"
+        for name,status in result.items():
+            text += '%s:%s\n'%(name,status)
+        utils.toggle_mode(message.chat.id, 'edit')
+
+    bot.send_message(message.chat.id, text, reply_markup=markup)
+
+
 # Работа с кнопками в режиме просмотра
 @bot.message_handler(func=lambda message: utils.get_mode(message.chat.id) == 'edit', content_types=["text"])
 def buttons(message):
     # Текст и кнопки по умолчанию
     markup = None
     text = "..."
+    text2 = "..."
     # Печатаем сообщение которое будем изменять
     request = bot.send_message(message.chat.id, text, reply_markup=markup)
     # Если хотим активировать фильтр
@@ -152,13 +173,24 @@ def buttons(message):
         else:
             text = "Выберите фильтр для удаления"
 
+    # Если экспортировать свои фильтры
+    elif message.text == 'Экспорт':
+        text = 'Данные для эскпорта:\n'
+        text += utils.export_filters(message.chat.id)
+
+        # Если импортировать фильтры
+    elif message.text == 'Импорт':
+        text = 'Импорт фильтров'
+        text2 = 'Введите данные для импорта в формате {"filer1":"regexp1","filter2":"regexp2"}'
+        utils.toggle_mode(message.chat.id, 'import')
+
     # Если не знаем кнопки, то ничего не делаем
     else:
         text = 'Неизвестная команда'
     # Собираем сообщение и отправляем в чат
-    bot.edit_message_text(chat_id=request.chat.id, text=text.format(text),
+    bot.edit_message_text(chat_id=request.chat.id, text=text,
                           message_id=request.message_id, reply_markup=markup)
-    if message.text == 'Добавить фильтр':
+    if message.text == 'Добавить фильтр' or message.text == 'Импорт':
         bot.send_message(message.chat.id, text=text2, reply_markup=utils.gen_markup(utils.cancel))
 
         # Работа с кнопками в режиме просмотра
@@ -211,7 +243,7 @@ def buttons(message):
     else:
         text = 'Неизвестная команда'
     # Собираем сообщение и отправляем в чат
-    bot.edit_message_text(chat_id=request.chat.id, text=text.format(text),
+    bot.edit_message_text(chat_id=request.chat.id, text=text,
                           message_id=request.message_id, reply_markup=markup)
 
 
@@ -334,12 +366,12 @@ def send_to_chat(chatid, title, id):
 
 # Функция для старта поллинга бота
 def start_telebot():
-    while True:
-        try:
-            print('Running telegram bot listener')
-            bot.polling(none_stop=True)
-        except Exception:
-            continue
+    # while True:
+    # try:
+    print('Running telegram bot listener')
+    bot.polling(none_stop=True)
+    # except Exception:
+    # continue
 
 
 def queue_check():

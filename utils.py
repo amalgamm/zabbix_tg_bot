@@ -10,7 +10,7 @@ from queue import Queue
 from config import redis_db, redis_server
 from telebot import types
 from mvno_gms import send_to_chat
-
+import json
 from datetime import datetime
 
 this = sys.modules[__name__]
@@ -21,7 +21,7 @@ r = redis.Redis(connection_pool=pool)
 qbus = Queue()
 
 main_menu = ["Активировать фильтр", "Деактивировать фильтр", "Активные фильтры", "История событий"]
-edit_menu = ['Посмотреть фильтр', 'Добавить фильтр', 'Редактировать фильтр', 'Удалить фильтр']
+edit_menu = ['Посмотреть фильтр', 'Добавить фильтр', 'Редактировать фильтр', 'Удалить фильтр','Экспорт','Импорт']
 cancel = ['Отмена']
 
 
@@ -272,6 +272,25 @@ def get_counter(chat_id, offset=0, filter=''):
         keyboard.add(types.InlineKeyboardButton(text='Показать еще', callback_data='stat_%s_%s' % (offset, filter)))
     return keyboard
 
+
+# Получаем список фильтров пользователя и формируем сообщение для экспорта
+def export_filters(chat_id):
+    filters = get_all_filters(chat_id)
+    export_data = {}
+    for f in filters:
+        export_data[f] = get_filter(chat_id,f)
+    return (json.dumps(export_data))
+
+def import_filter(chat_id,import_data):
+    data = json.loads(import_data)
+    result = {}
+    for name,regex in data.items():
+        status = r.set("filter:%s:%s" % (chat_id, name), regex)
+        if status is True:
+            result[name] = "OK"
+        else:
+            result[name] = "Error"
+    return result
 
 def get_alarm_by_filter(chat_id, filter):
     return r.keys('buffer:%s:%s:*' % (chat_id, filter))
