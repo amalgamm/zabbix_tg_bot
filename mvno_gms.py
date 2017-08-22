@@ -87,7 +87,7 @@ def input_regex(message):
     if message.text == 'Отмена':
         filter = utils.get_mode(message.chat.id)
         utils.toggle_mode(message.chat.id, 'edit')
-        if filter in utils.get_new_filters():
+        if filter in utils.get_new_filters(message.chat.id):
             utils.delete_filter(message.chat.id, filter)
         text = 'Изменение отменено'
         markup = utils.gen_markup(utils.edit_menu)
