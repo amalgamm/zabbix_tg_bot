@@ -103,7 +103,9 @@ def input_regex(message):
             utils.toggle_mode(message.chat.id, 'edit')
             if filter in utils.get_new_filters(message.chat.id):
                 utils.delete_filter(message.chat.id, filter)
-            text = 'Фильтр %s успешно изменен' % filter
+                text = 'Фильтр %s успешно создан' % filter
+            else:
+                text = 'Фильтр %s успешно изменен' % filter
             markup = utils.gen_markup(utils.edit_menu)
         else:
             text = 'Некорректное регулярное выражение, введите корректное значение'

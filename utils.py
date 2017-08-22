@@ -29,11 +29,12 @@ cancel = ['Отмена']
 def reset_user(chat_id):
     for keys in r.keys("users:" + str(chat_id) + ":*"):
         r.delete(keys)
-
+    return
 
 # Переключаем режим пользователя
 def toggle_mode(chat_id, mode):
     r.set("users:" + str(chat_id) + ":mode", mode)
+    return
 
 
 # Проверяем режим пользователя
@@ -119,19 +120,20 @@ def delete_filter(chat_id, filter):
         r.delete("filter:%s:%s" % (chat_id, filter))
         r.delete("new:%s:%s" % (chat_id, filter))
         unset_filter(chat_id, filter)
-
+    return
 
 # Изменяем фильтр
 def edit_filter(chat_id, filter, regex):
     entry = str(r.get("filter:%s:%s" % (chat_id, filter)))
     r.set("edited:%s:%s" % (chat_id, filter), entry)
     r.set("filter:%s:%s" % (chat_id, filter), regex)
-
+    return
 
 # Создаем фильтрр
 def create_filter(chat_id, filter):
     r.set("filter:%s:%s" % (chat_id, filter), '')
     r.set("new:%s:%s" % (chat_id, filter), '')
+    return
 
 
 # Добавляем фильтр в активные
