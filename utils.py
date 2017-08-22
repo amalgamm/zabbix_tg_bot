@@ -200,8 +200,8 @@ def getAlarm(chat_id, title, body):
         id = to_buffer(chat_id, f, title, body)
         # Для всех пользователей у кого активен фильтр отправляем сообщение
         # for user in get_users():
-        # if check_filter(user, f) is True:
-        # send_to_chat(user, title, id)
+        if check_filter(chat_id, f) is True:
+            send_to_chat(chat_id, title, id)
     return
 
 
