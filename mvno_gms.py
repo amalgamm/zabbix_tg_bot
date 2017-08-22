@@ -45,7 +45,7 @@ def reset(message):
 
 # Ловим команду для входа в режим редактирования
 @bot.message_handler(commands=['edit'])
-def reset(message):
+def edit(message):
     markup = None
     markup = utils.gen_markup(utils.edit_menu)
     utils.toggle_mode(message.chat.id, 'edit')
@@ -55,7 +55,7 @@ def reset(message):
 
 # Ловим команду для входа в режим просмотра
 @bot.message_handler(commands=['track'])
-def reset(message):
+def track(message):
     markup = None
     markup = utils.gen_markup(utils.main_menu)
     utils.toggle_mode(message.chat.id, 'track')
@@ -127,8 +127,8 @@ def input_regex(message):
         import_data = message.text
         result = utils.import_filter(message.chat.id, import_data)
         text = "Статус операции импорта по фильтрам:\n"
-        for name,status in result.items():
-            text += '%s:%s\n'%(name,status)
+        for name, status in result.items():
+            text += '%s:%s\n' % (name, status)
         utils.toggle_mode(message.chat.id, 'edit')
 
     bot.send_message(message.chat.id, text, reply_markup=markup)
@@ -366,12 +366,12 @@ def send_to_chat(chatid, title, id):
 
 # Функция для старта поллинга бота
 def start_telebot():
-    # while True:
-    # try:
-    print('Running telegram bot listener')
-    bot.polling(none_stop=True)
-    # except Exception:
-    # continue
+    while True:
+        try:
+            print('Running telegram bot listener')
+            bot.polling(none_stop=True)
+        except Exception:
+            continue
 
 
 def queue_check():

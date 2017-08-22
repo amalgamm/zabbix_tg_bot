@@ -21,13 +21,15 @@ r = redis.Redis(connection_pool=pool)
 qbus = Queue()
 
 main_menu = ["Активировать фильтр", "Деактивировать фильтр", "Активные фильтры", "История событий"]
-edit_menu = ['Посмотреть фильтр', 'Добавить фильтр', 'Редактировать фильтр', 'Удалить фильтр','Экспорт','Импорт']
+edit_menu = ['Посмотреть фильтр', 'Добавить фильтр', 'Редактировать фильтр', 'Удалить фильтр', 'Экспорт', 'Импорт']
 cancel = ['Отмена']
 
 
 # Сбрасываем все настройки пользователя
 def reset_user(chat_id):
-    for keys in r.keys("users:" + str(chat_id) + ":*"):
+    for keys in r.keys("users:%s:*" % chat_id):
+        r.delete(keys)
+    for keys in r.keys("filters:%s:*" % chat_id):
         r.delete(keys)
     return
 
@@ -278,19 +280,29 @@ def export_filters(chat_id):
     filters = get_all_filters(chat_id)
     export_data = {}
     for f in filters:
-        export_data[f] = get_filter(chat_id,f)
+        export_data[f] = get_filter(chat_id, f)
     return (json.dumps(export_data))
 
-def import_filter(chat_id,import_data):
+
+def import_filter(chat_id, import_data):
     data = json.loads(import_data)
     result = {}
-    for name,regex in data.items():
-        status = r.set("filter:%s:%s" % (chat_id, name), regex)
-        if status is True:
-            result[name] = "OK"
+    for name, regex in data.items():
+        try:
+            re.compile(regex)
+            is_valid = True
+        except re.error:
+            is_valid = False
+        if is_valid is True:
+            status = r.set("filter:%s:%s" % (chat_id, name), regex)
+            if status is True:
+                result[name] = "ОК"
+            else:
+                result[name] = "Ошибка при работе с базой"
         else:
-            result[name] = "Error"
+            result[name] = "Некорректное регулярное выражение"
     return result
+
 
 def get_alarm_by_filter(chat_id, filter):
     return r.keys('buffer:%s:%s:*' % (chat_id, filter))
