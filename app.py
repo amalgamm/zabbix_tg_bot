@@ -315,6 +315,7 @@ def control_filter(call):
 @bot.callback_query_handler(
     func=lambda call: (call.data[:4] == 'stat') and utils.get_mode(call.message.chat.id) == 'track')
 def get_stat(call):
+    print(call.data)
     offset = int(call.data.split('_')[1])
     filter = call.data.split('_')[2]
     alarms = utils.get_alarm_by_filter(call.message.chat.id, filter)
@@ -332,7 +333,7 @@ def get_stat(call):
     remains = len(sorted_alarms) - (offset + 5)
     if remains > 0:
         bot.send_message(call.message.chat.id, "Осталось сообщений: %s" % remains,
-                         reply_markup=utils.get_counter(offset + 5, filter))
+                         reply_markup=utils.get_counter(call.message.chat.id,offset + 5, filter))
 
 
 # Обработка запросов на получение подробной информации:
