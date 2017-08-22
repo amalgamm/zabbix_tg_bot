@@ -236,7 +236,7 @@ def get_filter(call):
     elif action == 'edit':
         utils.toggle_mode(call.message.chat.id, data)
         text = "Редактирование фильтра %s\nТекущее значение:\n%s" % (data, utils.get_filter(call.message.chat.id, data))
-        text2 = "Введите регулярное выражение"
+        text2 = "Введите регулярное выражение\nhttp://www.exlab.net/files/tools/sheets/regexp/regexp.pdf"
 
     if action in ['show', 'delete']:
         bot.edit_message_text(chat_id=call.message.chat.id, text=text2,
