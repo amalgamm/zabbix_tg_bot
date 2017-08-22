@@ -19,8 +19,9 @@ bot = telebot.TeleBot(token, skip_pending=True, threaded=True)
 def start(message):
     print("bot started with %s %s" % (message.chat.username, message.chat.id))
     utils.toggle_mode(message.chat.id, 'track')
+
     bot.send_message(message.chat.id,
-                     "Перед использованием настройте фильтры\nДля просмотра команд наберите /help",
+                     "Ваш ID %s\nПеред использованием настройте фильтры\nДля просмотра доступных команд наберите /help"%message.chat.id,
                      reply_markup=utils.gen_markup(utils.main_menu))
 
 
