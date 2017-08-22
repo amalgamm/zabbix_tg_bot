@@ -10,7 +10,6 @@ from config import token
 from threading import Thread
 from operator import itemgetter
 import re
-import json
 
 bot = telebot.TeleBot(token, skip_pending=True, threaded=True)
 
@@ -19,8 +18,7 @@ bot = telebot.TeleBot(token, skip_pending=True, threaded=True)
 @bot.message_handler(commands=['start'])
 def start(message):
     print("bot started with %s %s" % (message.chat.username, message.chat.id))
-    utils.toggle_mode(message.chat.id, 'track')
-
+    utils.new_user(message.chat.id)
     bot.send_message(message.chat.id,
                      "Ваш ID %s\nПеред использованием настройте фильтры\nДля просмотра доступных команд наберите /help" % message.chat.id,
                      reply_markup=utils.gen_markup(utils.main_menu))
@@ -39,8 +37,10 @@ def start(message):
 def reset(message):
     utils.reset_user(message.chat.id)
     bot.send_message(message.chat.id,
-                     "Перед использованием настройте фильтры\nДля входа в режим редактирования наберите /edit",
-                     reply_markup=utils.types.ReplyKeyboardRemove)
+                     "/start - начать работу с ботом\n/reset - удалить все свои настройки\n"
+                     "/edit - войти в режим редактирования фильтров\n/track - войти в режим получения уведомлений\n"
+                     "/help - посмотреть список команд",
+                     reply_markup=telebot.types.ReplyKeyboardRemove(selective=False))
 
 
 # Ловим команду для входа в режим редактирования
@@ -262,14 +262,18 @@ def get_filter(call):
         text2 = 'Выберите фильтр для просмотра'
         markup = utils.gen_inl_filters('get_all_filters', call.message.chat.id, reply.message_id, action)
     elif action == 'delete':
-        utils.delete_filter(call.message.chat.id, data, 'purged')
-        text = "Фильтр %s удален" % data
+        text = utils.delete_filter(call.message.chat.id, data, 'purged')
         text2 = 'Выберите фильтр для удаления'
         markup = utils.gen_inl_filters('get_all_filters', call.message.chat.id, reply.message_id, action)
     elif action == 'edit':
-        utils.toggle_mode(call.message.chat.id, data)
-        text = "Редактирование фильтра %s\nТекущее значение:\n%s" % (data, utils.get_filter(call.message.chat.id, data))
-        text2 = "Введите регулярное выражение\nhttp://www.exlab.net/files/tools/sheets/regexp/regexp.pdf"
+        if data == 'other':
+            text = 'Вы не можете редактировать значение фильтра по умолчанию'
+            utils.toggle_mode(call.message.chat.id, 'edit')
+        else:
+            utils.toggle_mode(call.message.chat.id, data)
+            text = "Редактирование фильтра %s\nТекущее значение:\n%s" % (
+                data, utils.get_filter(call.message.chat.id, data))
+            text2 = "Введите регулярное выражение\nhttp://www.exlab.net/files/tools/sheets/regexp/regexp.pdf"
 
     if action in ['show', 'delete']:
         bot.edit_message_text(chat_id=call.message.chat.id, text=text2,
@@ -280,7 +284,8 @@ def get_filter(call):
     elif action == "edit":
         bot.edit_message_text(chat_id=call.message.chat.id, text=text,
                               message_id=reply.message_id, reply_markup=markup)
-        bot.send_message(call.message.chat.id, text=text2, reply_markup=utils.gen_markup(utils.cancel))
+        if data != 'other':
+            bot.send_message(call.message.chat.id, text=text2, reply_markup=utils.gen_markup(utils.cancel))
 
 
 # Активируем или деактивируем фильтр
@@ -315,7 +320,6 @@ def control_filter(call):
 @bot.callback_query_handler(
     func=lambda call: (call.data[:4] == 'stat') and utils.get_mode(call.message.chat.id) == 'track')
 def get_stat(call):
-    print(call.data)
     offset = int(call.data.split('_')[1])
     filter = call.data.split('_')[2]
     alarms = utils.get_alarm_by_filter(call.message.chat.id, filter)
@@ -333,7 +337,7 @@ def get_stat(call):
     remains = len(sorted_alarms) - (offset + 5)
     if remains > 0:
         bot.send_message(call.message.chat.id, "Осталось сообщений: %s" % remains,
-                         reply_markup=utils.get_counter(call.message.chat.id,offset + 5, filter))
+                         reply_markup=utils.get_counter(call.message.chat.id, offset + 5, filter))
 
 
 # Обработка запросов на получение подробной информации:

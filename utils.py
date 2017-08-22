@@ -29,21 +29,31 @@ cancel = ['Отмена']
 def reset_user(chat_id):
     for keys in r.keys("users:%s:*" % chat_id):
         r.delete(keys)
-    for keys in r.keys("filters:%s:*" % chat_id):
+    for keys in r.keys("filter:%s:*" % chat_id):
         r.delete(keys)
     return
 
 
 # Переключаем режим пользователя
+def new_user(chat_id):
+    for keys in r.keys("users:%s:*" % chat_id):
+        r.delete(keys)
+    toggle_mode(chat_id, 'track')
+    r.set("filter:%s:other" % chat_id, '')
+    r.lpush("users:%s:active" % chat_id, 'other')
+    return
+
+
+# Переключаем режим пользователя
 def toggle_mode(chat_id, mode):
-    r.set("users:" + str(chat_id) + ":mode", mode)
+    r.set("users:%s:mode" % chat_id, mode)
     return
 
 
 # Проверяем режим пользователя
 def get_mode(chat_id):
     try:
-        return r.get("users:" + str(chat_id) + ":mode")
+        return r.get("users:%s:mode" % chat_id)
     except Exception:
         return None
 
@@ -78,7 +88,7 @@ def get_new_filters(chat_id=''):
 # Генерим жесткие кнопки меню
 def gen_markup(menu):
     # Формируем начальное навигационное меню
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2, selective=True)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2, selective=False)
     row = []
     for i in menu:
         row.append(i)
@@ -92,7 +102,6 @@ def gen_inl_markup(menu, message_id, action):
     row = []
     if isinstance(menu, dict):
         for t, d in menu.items():
-            print(t, d)
             row.append(types.InlineKeyboardButton(text=t, callback_data='%s_%s_%s' % (d, message_id, action)))
     if isinstance(menu, list):
         for t in menu:
@@ -121,12 +130,14 @@ def delete_filter(chat_id, filter, category):
     elif category == 'new':
         r.delete("new:%s:%s" % (chat_id, filter))
     else:
+        if filter == 'other':
+            return "Фильтр other не может быть удален т.к. является фильтром по-умолчанию"
         entry = str(r.get("filter:%s:%s" % (chat_id, filter)))
         r.set("deleted:%s:%s" % (chat_id, filter), entry)
         r.delete("filter:%s:%s" % (chat_id, filter))
         r.delete("new:%s:%s" % (chat_id, filter))
         unset_filter(chat_id, filter)
-    return
+    return "Фильтр %s удален" % filter
 
 
 # Изменяем фильтр
@@ -146,22 +157,22 @@ def create_filter(chat_id, filter):
 
 # Добавляем фильтр в активные
 def set_filter(chat_id, filter):
-    r.lpush("users:" + str(chat_id) + ":active", filter)
-    return "Фильтр " + filter + " активирован"
+    r.lpush("users:%s:active" % chat_id, filter)
+    return "Фильтр %s активирован" % filter
 
 
 # Добавляем фильтр в неактивные
 def unset_filter(chat_id, filter):
-    r.lrem("users:" + str(chat_id) + ":active", filter)
-    return "Фильтр " + filter + " деактивирован"
+    r.lrem("users:%s:active" % chat_id, filter)
+    return "Фильтр %s деактивирован" % filter
 
 
 # Получаем спосик активных фильтров
 def get_active_filters(chat_id):
-    chk = r.keys("users:" + str(chat_id) + ':active')
+    chk = r.keys("users:%s:active" % chat_id)
     if len(chk) == 0:
         return []
-    a_list = r.lrange("users:" + str(chat_id) + ":active", 0, 100)
+    a_list = r.lrange("users:%s:active" % chat_id, 0, 100)
     return a_list
 
 
@@ -211,6 +222,8 @@ def getAlarm(chat_id, title, body):
 def sort(chat_id, title):
     filters = []
     for f in get_all_filters(chat_id):
+        if f == 'other':
+            continue
         mask = r.get("filter:%s:%s" % (chat_id, f))
         if re.match(mask, title, re.MULTILINE | re.DOTALL) is not None:
             filters.append(f)
