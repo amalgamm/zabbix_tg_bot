@@ -114,6 +114,7 @@ def gen_inl_filters(type, chat_id, message_id, action='none'):
 def delete_filter(chat_id, filter):
     if filter in get_new_filters(chat_id):
         r.delete("new:%s:%s" % (chat_id, filter))
+        r.delete("filter:%s:%s" % (chat_id, filter))
     else:
         entry = str(r.get("filter:%s:%s" % (chat_id, filter)))
         r.set("deleted:%s:%s" % (chat_id, filter), entry)
