@@ -169,7 +169,7 @@ def buttons(message):
     elif message.text == 'Удалить фильтр':
         markup = utils.gen_inl_filters('get_all_filters', message.chat.id, request.message_id, 'delete')
         if markup is None:
-            text = "Нет доступных фильтров"
+            text = "Нет доступных подписок"
         else:
             text = "Выберите фильтр для удаления"
 
@@ -205,28 +205,28 @@ def buttons(message):
     # Печатаем сообщение которое будем изменять
     request = bot.send_message(message.chat.id, text, reply_markup=markup)
     # Если хотим активировать фильтр
-    if message.text == 'Активировать фильтр':
+    if message.text == 'Подписаться':
         markup = utils.gen_inl_filters('get_inactive_filters', message.chat.id, request.message_id)
         if markup is None:
-            text = "Нет доступных фильтров"
+            text = "Нет доступных подписок"
         else:
-            text = "Выберите фильтр"
+            text = "Выберите подписку"
 
 
     # Если хотим деактивировать фильтр
-    elif message.text == 'Деактивировать фильтр':
+    elif message.text == 'Отписаться':
         markup = utils.gen_inl_filters('get_active_filters', message.chat.id, request.message_id)
         if markup is None:
-            text = "Нет активных фильтров"
+            text = "Нет активных подписок"
         else:
-            text = "Выберите фильтр"
+            text = "Выберите подписку"
 
     # Если хотим посмотреть активные фильры
-    elif message.text == 'Активные фильтры':
+    elif message.text == 'Активные подписки':
         text = ''
         filters = utils.get_active_filters(message.chat.id)
         if len(filters) == 0:
-            text = 'Нет активных фильтров'
+            text = 'Нет активных подписок'
         else:
             for f in filters:
                 text += f + '\n'
@@ -266,7 +266,7 @@ def get_filter(call):
         text2 = 'Выберите фильтр для удаления'
         markup = utils.gen_inl_filters('get_all_filters', call.message.chat.id, reply.message_id, action)
     elif action == 'edit':
-        if data == 'other':
+        if data == 'Без категории':
             text = 'Вы не можете редактировать значение фильтра по умолчанию'
             utils.toggle_mode(call.message.chat.id, 'edit')
         else:
@@ -284,7 +284,7 @@ def get_filter(call):
     elif action == "edit":
         bot.edit_message_text(chat_id=call.message.chat.id, text=text,
                               message_id=reply.message_id, reply_markup=markup)
-        if data != 'other':
+        if data != 'Без категории':
             bot.send_message(call.message.chat.id, text=text2, reply_markup=utils.gen_markup(utils.cancel))
 
 
@@ -305,11 +305,11 @@ def control_filter(call):
         markup = utils.gen_inl_filters('get_active_filters', call.message.chat.id, reply.message_id)
     # Какой-то некорректный фильтр
     else:
-        text = "Некорректное имя фильтра"
+        text = "Некорректное имя подписки"
         markup = None
     # Собираем сообщение и изменяем первое сообщение
 
-    bot.edit_message_text(chat_id=call.message.chat.id, text="Выберите фильтр",
+    bot.edit_message_text(chat_id=call.message.chat.id, text="Выберите подписку",
                           message_id=reply.message_id, reply_markup=markup)
 
     bot.edit_message_text(chat_id=call.message.chat.id, text=text,

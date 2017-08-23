@@ -20,7 +20,7 @@ r = redis.Redis(connection_pool=pool)
 
 qbus = Queue()
 
-main_menu = ["Активировать фильтр", "Деактивировать фильтр", "Активные фильтры", "История событий"]
+main_menu = ["Подписаться", "Отписаться", "Активные подписки", "История событий"]
 edit_menu = ['Посмотреть фильтр', 'Добавить фильтр', 'Редактировать фильтр', 'Удалить фильтр', 'Экспорт', 'Импорт']
 cancel = ['Отмена']
 
@@ -39,8 +39,8 @@ def new_user(chat_id):
     for keys in r.keys("users:%s:*" % chat_id):
         r.delete(keys)
     toggle_mode(chat_id, 'track')
-    r.set("filter:%s:other" % chat_id, '')
-    r.lpush("users:%s:active" % chat_id, 'other')
+    r.set("filter:%s:Без категории" % chat_id, '')
+    r.lpush("users:%s:active" % chat_id, 'Без категории')
     return
 
 
@@ -130,8 +130,8 @@ def delete_filter(chat_id, filter, category):
     elif category == 'new':
         r.delete("new:%s:%s" % (chat_id, filter))
     else:
-        if filter == 'other':
-            return "Фильтр other не может быть удален т.к. является фильтром по-умолчанию"
+        if filter == 'Без категории':
+            return "Фильтр Без категории не может быть удален т.к. является фильтром по-умолчанию"
         entry = str(r.get("filter:%s:%s" % (chat_id, filter)))
         r.set("deleted:%s:%s" % (chat_id, filter), entry)
         r.delete("filter:%s:%s" % (chat_id, filter))
@@ -158,13 +158,13 @@ def create_filter(chat_id, filter):
 # Добавляем фильтр в активные
 def set_filter(chat_id, filter):
     r.lpush("users:%s:active" % chat_id, filter)
-    return "Фильтр %s активирован" % filter
+    return "Подписка \"%s\" включена" % filter
 
 
 # Добавляем фильтр в неактивные
 def unset_filter(chat_id, filter):
     r.lrem("users:%s:active" % chat_id, filter)
-    return "Фильтр %s деактивирован" % filter
+    return "Подписка \"%s\" отключена" % filter
 
 
 # Получаем спосик активных фильтров
@@ -222,14 +222,14 @@ def getAlarm(chat_id, title, body):
 def sort(chat_id, title):
     filters = []
     for f in get_all_filters(chat_id):
-        if f == 'other':
+        if f == 'Без категории':
             continue
         mask = r.get("filter:%s:%s" % (chat_id, f))
         if re.match(mask, title, re.MULTILINE | re.DOTALL) is not None:
             filters.append(f)
     if len(filters) > 0:
         return filters
-    return ["other"]
+    return ["Без категории"]
 
 
 # Записываем сообщение в буфер, получаем идентификатор сообщения
