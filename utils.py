@@ -5,6 +5,7 @@ import redis
 import re
 import uuid
 import sys
+from urllib.parse import quote
 
 from queue import Queue
 from config import redis_db, redis_server
@@ -63,6 +64,8 @@ def reset_user(chat_id):
     for keys in r.keys("users:%s:*" % chat_id):
         r.delete(keys)
     for keys in r.keys("filter:%s:*" % chat_id):
+        r.delete(keys)
+    for keys in r.keys("buffer:%s:*" % chat_id):
         r.delete(keys)
     return
 
@@ -255,7 +258,7 @@ def sort(chat_id, title, body):
 
 # Записываем сообщение в буфер, получаем идентификатор сообщения
 def to_buffer(chat_id, filter, title, body):
-    id = str(uuid.uuid4())
+    id = str(uuid.uuid4())[:13]
     r.hmset('buffer:%s:%s:%s' % (chat_id, filter, id), {'title': title, 'body': body, 'time': datetime.now().strftime(
         '%Y-%m-%d %H:%M:%S')})
     r.expire('buffer:%s:%s:%s' % (chat_id, filter, id), 86400)
@@ -264,6 +267,7 @@ def to_buffer(chat_id, filter, title, body):
 
 # Генерим кнопку для подробной информации об аларме
 def get_event_data(event_id, message_id, filter):
+    print('%s_%s_%s_%s' % (event_id, message_id, filter, 'show'))
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     keyboard.add(
         types.InlineKeyboardButton(text="Подробнее",
