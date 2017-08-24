@@ -38,14 +38,14 @@ class Parser(threading.Thread):
             # Обрабатываем событие
             chat_id, title, body = queue_item[0], queue_item[1], queue_item[2]
             # Определяем к какой группе относится событие
-            filters = sort(chat_id, title)
+            filters = sort(chat_id, title, body)
             for f in filters:
                 # Запмсываем в буфер, получаем идентификатор
                 id = to_buffer(chat_id, f, title, body)
                 # Для всех пользователей у кого активен фильтр отправляем сообщение
                 # for user in get_users():
                 if check_filter(chat_id, f) is True:
-                    send_to_chat(chat_id, title, id)
+                    send_to_chat(chat_id, title, id, f)
             continue
 
 
@@ -239,28 +239,14 @@ def get_users():
     return users
 
 
-# Обрабатываем событие
-def getAlarm(chat_id, title, body):
-    # Определяем к какой группе относится событие
-    filters = sort(chat_id, title)
-    for f in filters:
-        # Запмсываем в буфер, получаем идентификатор
-        id = to_buffer(chat_id, f, title, body)
-        # Для всех пользователей у кого активен фильтр отправляем сообщение
-        # for user in get_users():
-        if check_filter(chat_id, f) is True:
-            send_to_chat(chat_id, title, id)
-    return
-
-
 # Классифицируем сообщение под какой-либо шаблон
-def sort(chat_id, title):
+def sort(chat_id, title, body):
     filters = []
     for f in get_all_filters(chat_id):
         if f == 'Без категории':
             continue
         mask = r.get("filter:%s:%s" % (chat_id, f))
-        if re.match(mask, title, re.MULTILINE | re.DOTALL) is not None:
+        if re.match(mask, title + body, re.MULTILINE | re.DOTALL) is not None:
             filters.append(f)
     if len(filters) > 0:
         return filters
@@ -277,20 +263,20 @@ def to_buffer(chat_id, filter, title, body):
 
 
 # Генерим кнопку для подробной информации об аларме
-def get_event_data(event_id, message_id):
+def get_event_data(event_id, message_id, filter):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     keyboard.add(
         types.InlineKeyboardButton(text="Подробнее",
-                                   callback_data='%s_%s_%s' % (event_id, message_id, 'show')))
+                                   callback_data='%s_%s_%s_%s' % (event_id, message_id, filter, 'show')))
     return keyboard
 
 
 # Генерим кнопку для скрытия информации об аларме
-def hide_event_data(event_id, message_id):
+def hide_event_data(event_id, message_id, filter):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     keyboard.add(
         types.InlineKeyboardButton(text="Скрыть",
-                                   callback_data='%s_%s_%s' % (event_id, message_id, 'hide')))
+                                   callback_data='%s_%s_%s_%s' % (event_id, message_id, filter, 'hide')))
     return keyboard
 
 
@@ -300,7 +286,8 @@ def from_buffer(chat_id, id):
         path = r.keys('buffer:%s:*:%s' % (chat_id, id))
         return r.hgetall(path[0])
     except Exception:
-        return {'title': 'Ой!', 'body': 'Сообщение было удалено из буфера по таймауту', 'time': 'Более 24 часов назад'}
+        # return {'title': 'Ой!', 'body': 'Сообщение было удалено из буфера по таймауту', 'time': 'Более 24 часов назад'}
+        return None
 
 
 # Получаем счетчики по всем фильтрам, формируем кнопки для них
@@ -339,8 +326,8 @@ def import_filter(chat_id, import_data):
         return "Некорректный формат строки импорта"
     result = {}
     for name, regex in data.items():
-        if ":" in name:
-            return 'Использование в названии знака \":\" недопустимо'
+        if ":" in name or "_" in name:
+            text = 'Использование символов \":\" и \"_\" в названии фильтра недопустимо'
         if isinstance(regex, str):
             try:
                 re.compile(regex)

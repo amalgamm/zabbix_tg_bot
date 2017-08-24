@@ -73,8 +73,8 @@ def input_regex(message):
         markup = utils.gen_markup(utils.edit_menu)
     else:
         filter = message.text
-        if ":" in filter:
-            text = 'Использование в названии знака \":\" недопустимо'
+        if ":" in filter or "_" in filter:
+            text = 'Использование символов \":\" и \"_\" в названии фильтра недопустимо'
         else:
             if filter not in utils.get_all_filters(message.chat.id):
                 utils.create_filter(message.chat.id, filter)
@@ -209,7 +209,7 @@ def buttons(message):
     markup = None
     text = "..."
     # Печатаем сообщение которое будем изменять
-    request = bot.send_message(message.chat.id, text, reply_markup=markup)
+    request = bot.send_message(message.chat.id, text, reply_markup=markup, parse_mode='HTML')
     # Если хотим активировать фильтр
     if message.text == 'Подписаться':
         markup = utils.gen_inl_filters('get_inactive_filters', message.chat.id, request.message_id)
@@ -347,7 +347,7 @@ def get_stat(call):
     for s in reversed(sorted_alarms[offset:offset + 5]):
         # time = datetime.strptime(s["time"], '%Y-%m-%d %H:%M:%S')
         title = s["time"] + '\n' + s["title"]
-        send_to_chat(call.message.chat.id, title, s['id'])
+        send_to_chat(call.message.chat.id, title, s['id'], filter)
     remains = len(sorted_alarms) - (offset + 5)
     if remains > 0:
         bot.send_message(call.message.chat.id, "Осталось сообщений: %s" % remains,
@@ -358,29 +358,32 @@ def get_stat(call):
 @bot.callback_query_handler(func=lambda call: utils.get_mode(call.message.chat.id) == 'track')
 def show_body(call):
     # Извлекаем id сообщения в zabbix
-    id, msg, action = str(call.data).split('_')
+    id, msg, filter, action = str(call.data).split('_')
     buffer = utils.from_buffer(call.message.chat.id, id)
-    title = buffer["time"] + '\n' + buffer["title"]
-    body = buffer["body"]
+    if buffer is not None:
+        title = buffer["time"] + '\n' + buffer["title"]
+        body = buffer["body"]
 
-    if action == 'show':
-        text = title + "\n" + body
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=int(msg), text=text,
-                              reply_markup=utils.hide_event_data(id, msg))
-    if action == 'hide':
-        text = title
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=int(msg), text=text,
-                              reply_markup=utils.get_event_data(id, msg))
+        if action == 'show':
+            text = "<b>%s</b>\n%s\n%s" % (filter, title, body)
+            bot.edit_message_text(chat_id=call.message.chat.id, message_id=int(msg), text=text, parse_mode='HTML',
+                                  reply_markup=utils.hide_event_data(id, msg, filter))
+        if action == 'hide':
+            text = "<b>%s</b>\n%s\n" % (filter, title)
+            bot.edit_message_text(chat_id=call.message.chat.id, message_id=int(msg), text=text, parse_mode='HTML',
+                                  reply_markup=utils.get_event_data(id, msg, filter))
+    else:
+        bot.send_message(call.message.chat.id, 'Сообщение было удалено по таймауту', reply_to_message_id=int(msg))
 
 
 # Отправляем заголовок сообщения в нужный чат
-def send_to_chat(chatid, title, id):
+def send_to_chat(chatid, title, id, filter):
     if utils.get_mode(chatid) != 'track':
         return
-    text = title + "\n"
-    first = bot.send_message(chatid, text)
+    text = "<b>%s</b>\n%s\n" % (filter, title)
+    first = bot.send_message(parse_mode='HTML', chat_id=chatid, text=text)
     bot.edit_message_reply_markup(chat_id=chatid, message_id=first.message_id,
-                                  reply_markup=utils.get_event_data(id, first.message_id))
+                                  reply_markup=utils.get_event_data(id, first.message_id, filter))
 
 
 # Функция для старта поллинга бота
