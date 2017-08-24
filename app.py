@@ -126,9 +126,12 @@ def input_regex(message):
     else:
         import_data = message.text
         result = utils.import_filter(message.chat.id, import_data)
-        text = "Статус операции импорта по фильтрам:\n"
-        for name, status in result.items():
-            text += '%s:%s\n' % (name, status)
+        if isinstance(result, dict):
+            text = "Статус операции импорта по фильтрам:\n"
+            for name, status in result.items():
+                text += '%s: %s\n' % (name, status)
+        else:
+            text = result
         utils.toggle_mode(message.chat.id, 'edit')
 
     bot.send_message(message.chat.id, text, reply_markup=markup)
@@ -372,11 +375,11 @@ def send_to_chat(chatid, title, id):
 # Функция для старта поллинга бота
 def start_telebot():
     while True:
-        try:
-            print('Running telegram bot listener')
-            bot.polling(none_stop=True)
-        except Exception:
-            continue
+        # try:
+        print('Running telegram bot listener')
+        bot.polling(none_stop=True)
+        # except Exception:
+        #    continue
 
 
 def queue_check():

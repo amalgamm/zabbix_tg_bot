@@ -298,22 +298,28 @@ def export_filters(chat_id):
 
 
 def import_filter(chat_id, import_data):
-    data = json.loads(import_data)
+    try:
+        data = json.loads(import_data)
+    except Exception:
+        return "Некорректный формат строки импорта"
     result = {}
     for name, regex in data.items():
-        try:
-            re.compile(regex)
-            is_valid = True
-        except re.error:
-            is_valid = False
-        if is_valid is True:
-            status = r.set("filter:%s:%s" % (chat_id, name), regex)
-            if status is True:
-                result[name] = "ОК"
+        if isinstance(regex, str):
+            try:
+                re.compile(regex)
+                is_valid = True
+            except re.error:
+                is_valid = False
+            if is_valid is True:
+                status = r.set("filter:%s:%s" % (chat_id, name), regex)
+                if status is True:
+                    result[name] = "ОК"
+                else:
+                    result[name] = "Ошибка при работе с базой"
             else:
-                result[name] = "Ошибка при работе с базой"
+                result[name] = "Некорректное регулярное выражение"
         else:
-            result[name] = "Некорректное регулярное выражение"
+            result[name] = "Значение регулярного выражения не может иметь вложенную структуру"
     return result
 
 
