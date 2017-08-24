@@ -73,12 +73,15 @@ def input_regex(message):
         markup = utils.gen_markup(utils.edit_menu)
     else:
         filter = message.text
-        if filter not in utils.get_all_filters(message.chat.id):
-            utils.create_filter(message.chat.id, filter)
-            utils.toggle_mode(message.chat.id, filter)
-            text = 'Введите регулярное выражение для фильтра %s\nhttp://www.exlab.net/files/tools/sheets/regexp/regexp.pdf' % filter
+        if ":" in filter:
+            text = 'Использование в названии знака \":\" недопустимо'
         else:
-            text = 'Фильтр %s уже существует, выберите другое имя' % filter
+            if filter not in utils.get_all_filters(message.chat.id):
+                utils.create_filter(message.chat.id, filter)
+                utils.toggle_mode(message.chat.id, filter)
+                text = 'Введите регулярное выражение для фильтра %s\nhttp://www.exlab.net/files/tools/sheets/regexp/regexp.pdf' % filter
+            else:
+                text = 'Фильтр %s уже существует, выберите другое имя' % filter
     bot.send_message(message.chat.id, text, reply_markup=markup)
 
 

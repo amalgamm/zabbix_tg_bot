@@ -339,6 +339,8 @@ def import_filter(chat_id, import_data):
         return "Некорректный формат строки импорта"
     result = {}
     for name, regex in data.items():
+        if ":" in name:
+            return 'Использование в названии знака \":\" недопустимо'
         if isinstance(regex, str):
             try:
                 re.compile(regex)
