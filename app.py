@@ -302,17 +302,25 @@ def control_filter(call):
     if data in utils.get_inactive_filters(call.message.chat.id):
         text = utils.set_filter(call.message.chat.id, data)
         markup = utils.gen_inl_filters('get_inactive_filters', call.message.chat.id, reply.message_id)
+        if markup is None:
+            text2 = "Нет доступных подписок"
+        else:
+            text2 = "Выберите подписку"
     # Если фильтр есть в активных, то выключаем его
     elif data in utils.get_active_filters(call.message.chat.id):
         text = utils.unset_filter(call.message.chat.id, data)
         markup = utils.gen_inl_filters('get_active_filters', call.message.chat.id, reply.message_id)
+        if markup is None:
+            text2 = "Нет активных подписок"
+        else:
+            text2 = "Выберите подписку"
     # Какой-то некорректный фильтр
     else:
-        text = "Некорректное имя подписки"
+        text2 = "Некорректное имя подписки"
         markup = None
     # Собираем сообщение и изменяем первое сообщение
 
-    bot.edit_message_text(chat_id=call.message.chat.id, text="Выберите подписку",
+    bot.edit_message_text(chat_id=call.message.chat.id, text=text2,
                           message_id=reply.message_id, reply_markup=markup)
 
     bot.edit_message_text(chat_id=call.message.chat.id, text=text,
@@ -375,23 +383,29 @@ def send_to_chat(chatid, title, id):
 # Функция для старта поллинга бота
 def start_telebot():
     while True:
-        # try:
-        print('Running telegram bot listener')
-        bot.polling(none_stop=True)
-        # except Exception:
-        #    continue
-
-
-def queue_check():
-    while True:
         try:
-            msg = utils.qbus.get()
-            utils.getAlarm(msg[0], msg[1], msg[2])
+            print('Running telegram bot listener')
+            bot.polling(none_stop=True)
         except Exception:
             continue
 
 
-# Стартуем 2 потока: для поллинга и json-rpc сервер.
+# Обрабатываем очередь в пуле в 10 потоков
+def queue_check():
+    while True:
+        try:
+            queue = utils.qbus
+            parser_threads = utils.build_worker_pool(utils.Parser, queue, 10)
+
+            for worker in parser_threads:
+                worker.join()
+
+        except Exception:
+            print("error")
+            continue
+
+
+# Стартуем 3 потока: для поллинга телеграм API,json-rpc сервер и обработки очередей.
 if __name__ == '__main__':
     t1 = Thread(target=start_telebot, daemon=True)
     t2 = Thread(target=start_listener, daemon=True)

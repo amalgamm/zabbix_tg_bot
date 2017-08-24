@@ -12,6 +12,7 @@ from telebot import types
 from app import send_to_chat
 import json
 from datetime import datetime
+import threading
 
 this = sys.modules[__name__]
 pool = redis.ConnectionPool(host=redis_server, port=6379, db=redis_db, encoding='utf-8',
@@ -23,6 +24,38 @@ qbus = Queue()
 main_menu = ["Подписаться", "Отписаться", "Активные подписки", "История событий"]
 edit_menu = ['Посмотреть фильтр', 'Добавить фильтр', 'Редактировать фильтр', 'Удалить фильтр', 'Экспорт', 'Импорт']
 cancel = ['Отмена']
+
+
+class Parser(threading.Thread):
+    def __init__(self, queue):
+        threading.Thread.__init__(self)
+        self._queue = queue
+
+    def run(self):
+        while True:
+            queue_item = self._queue.get()
+
+            # Обрабатываем событие
+            chat_id, title, body = queue_item[0], queue_item[1], queue_item[2]
+            # Определяем к какой группе относится событие
+            filters = sort(chat_id, title)
+            for f in filters:
+                # Запмсываем в буфер, получаем идентификатор
+                id = to_buffer(chat_id, f, title, body)
+                # Для всех пользователей у кого активен фильтр отправляем сообщение
+                # for user in get_users():
+                if check_filter(chat_id, f) is True:
+                    send_to_chat(chat_id, title, id)
+            continue
+
+
+def build_worker_pool(task, queue, size):
+    workers = []
+    for _ in range(size):
+        worker = task(queue)
+        worker.start()
+        workers.append(worker)
+    return workers
 
 
 # Сбрасываем все настройки пользователя
@@ -117,6 +150,8 @@ def gen_inl_markup(menu, message_id, action):
 def gen_inl_filters(type, chat_id, message_id, action='none'):
     # Получаем кнопки, которые надо сгенерить определенному пользователю
     filters = getattr(this, type)(chat_id)
+    if len(filters) == 0:
+        return None
     # Генерим инлайн кнопки по списку
     markup = gen_inl_markup(filters, message_id, action)
     return markup
