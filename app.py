@@ -161,7 +161,7 @@ def buttons(message):
     elif message.text == 'Добавить фильтр':
         utils.toggle_mode(message.chat.id, 'input_name')
         text = "Cоздание нового фильтра"
-        text2 = "Введите имя фильтра"
+        text2 = "Введите имя фильтра\n использование символов \":\" и \"_\" недопустимо"
 
     # Если хотим посмотреть активные фильры
     elif message.text == 'Редактировать фильтр':
