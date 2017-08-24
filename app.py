@@ -10,7 +10,6 @@ from listener import start_listener
 from config import token
 from threading import Thread
 from operator import itemgetter
-from urllib.parse import unquote
 
 bot = telebot.TeleBot(token, skip_pending=True, threaded=True)
 
@@ -348,7 +347,7 @@ def get_stat(call):
     for s in reversed(sorted_alarms[offset:offset + 5]):
         # time = datetime.strptime(s["time"], '%Y-%m-%d %H:%M:%S')
         title = s["time"] + '\n' + s["title"]
-        send_to_chat(call.message.chat.id, title, s['id'], filter)
+        send_to_chat(call.message.chat.id, title, s['id'])
     remains = len(sorted_alarms) - (offset + 5)
     if remains > 0:
         bot.send_message(call.message.chat.id, "Осталось сообщений: %s" % remains,
@@ -359,7 +358,8 @@ def get_stat(call):
 @bot.callback_query_handler(func=lambda call: utils.get_mode(call.message.chat.id) == 'track')
 def show_body(call):
     # Извлекаем id сообщения в zabbix
-    id, msg, filter, action = str(call.data).split('_')
+    id, msg, action = str(call.data).split('_')
+    filter = utils.get_filter_by_id(call.message.chat.id, id)
     buffer = utils.from_buffer(call.message.chat.id, id)
     if buffer is not None:
         title = buffer["time"] + '\n' + buffer["title"]
@@ -368,23 +368,24 @@ def show_body(call):
         if action == 'show':
             text = "<b>%s</b>\n%s\n%s" % (filter, title, body)
             bot.edit_message_text(chat_id=call.message.chat.id, message_id=int(msg), text=text, parse_mode='HTML',
-                                  reply_markup=utils.hide_event_data(id, msg, filter))
+                                  reply_markup=utils.hide_event_data(id, msg))
         if action == 'hide':
             text = "<b>%s</b>\n%s\n" % (filter, title)
             bot.edit_message_text(chat_id=call.message.chat.id, message_id=int(msg), text=text, parse_mode='HTML',
-                                  reply_markup=utils.get_event_data(id, msg, filter))
+                                  reply_markup=utils.get_event_data(id, msg))
     else:
         bot.send_message(call.message.chat.id, 'Сообщение было удалено по таймауту', reply_to_message_id=int(msg))
 
 
 # Отправляем заголовок сообщения в нужный чат
-def send_to_chat(chatid, title, id, filter):
+def send_to_chat(chatid, title, id):
+    filter = utils.get_filter_by_id(chatid, id)
     if utils.get_mode(chatid) != 'track':
         return
     text = "<b>%s</b>\n%s\n" % (filter, title)
     first = bot.send_message(parse_mode='HTML', chat_id=chatid, text=text)
     bot.edit_message_reply_markup(chat_id=chatid, message_id=first.message_id,
-                                  reply_markup=utils.get_event_data(id, first.message_id, filter))
+                                  reply_markup=utils.get_event_data(id, first.message_id))
 
 
 # Функция для старта поллинга бота

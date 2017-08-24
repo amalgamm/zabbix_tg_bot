@@ -5,7 +5,6 @@ import redis
 import re
 import uuid
 import sys
-from urllib.parse import quote
 
 from queue import Queue
 from config import redis_db, redis_server
@@ -46,7 +45,7 @@ class Parser(threading.Thread):
                 # Для всех пользователей у кого активен фильтр отправляем сообщение
                 # for user in get_users():
                 if check_filter(chat_id, f) is True:
-                    send_to_chat(chat_id, title, id, f)
+                    send_to_chat(chat_id, title, id)
             continue
 
 
@@ -101,6 +100,14 @@ def show_filter(chat_id, message_id):
 # Получаем содержимое фильтра
 def get_filter(chat_id, filter):
     return r.get("filter:%s:%s" % (chat_id, filter))
+
+
+def get_filter_by_id(chat_id, event_id):
+    keys = r.keys("buffer:%s:*:%s" % (chat_id, event_id))
+    if len(keys) > 0:
+        return keys[0].split(":")[2]
+    else:
+        return None
 
 
 # Получаем список всех фильтров
@@ -266,21 +273,20 @@ def to_buffer(chat_id, filter, title, body):
 
 
 # Генерим кнопку для подробной информации об аларме
-def get_event_data(event_id, message_id, filter):
-    print('%s_%s_%s_%s' % (event_id, message_id, filter, 'show'))
+def get_event_data(event_id, message_id):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     keyboard.add(
         types.InlineKeyboardButton(text="Подробнее",
-                                   callback_data='%s_%s_%s_%s' % (event_id, message_id, filter, 'show')))
+                                   callback_data='%s_%s_%s' % (event_id, message_id, 'show')))
     return keyboard
 
 
 # Генерим кнопку для скрытия информации об аларме
-def hide_event_data(event_id, message_id, filter):
+def hide_event_data(event_id, message_id):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     keyboard.add(
         types.InlineKeyboardButton(text="Скрыть",
-                                   callback_data='%s_%s_%s_%s' % (event_id, message_id, filter, 'hide')))
+                                   callback_data='%s_%s_%s' % (event_id, message_id, 'hide')))
     return keyboard
 
 
