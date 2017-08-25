@@ -21,8 +21,10 @@ r = redis.Redis(connection_pool=pool)
 
 qbus = Queue()
 
-main_menu = ["Подписаться", "Отписаться", "Активные подписки", "История событий"]
-edit_menu = ['Посмотреть фильтр', 'Добавить фильтр', 'Редактировать фильтр', 'Удалить фильтр', 'Экспорт', 'Импорт']
+main_menu = ["Подписаться", "Отписаться", "Активные подписки", "История событий", "Меню"]
+edit_menu = ["Посмотреть фильтр", "Добавить фильтр", "Редактировать фильтр", "Удалить фильтр", "Экспорт", "Импорт",
+             "Меню"]
+mode_menu = ["Режим просмотра", "Режим настройки", "Сброс настроек"]
 cancel = ['Отмена']
 
 
@@ -60,50 +62,41 @@ def build_worker_pool(task, queue, size):
 
 # Сбрасываем все настройки пользователя
 def reset_user(chat_id):
-    for keys in r.keys("users:%s:*" % chat_id):
-        r.delete(keys)
-    for keys in r.keys("filter:%s:*" % chat_id):
-        r.delete(keys)
-    for keys in r.keys("buffer:%s:*" % chat_id):
+    for keys in r.keys("%s:*" % chat_id):
         r.delete(keys)
     return
 
 
 # Переключаем режим пользователя
 def new_user(chat_id):
-    for keys in r.keys("users:%s:*" % chat_id):
-        r.delete(keys)
+    reset_user(chat_id)
     toggle_mode(chat_id, 'track')
-    r.set("filter:%s:Без категории" % chat_id, '')
-    r.lpush("users:%s:active" % chat_id, 'Без категории')
+    r.set("%s:filter:Без категории" % chat_id, '')
+    r.lpush("%s:active" % chat_id, 'Без категории')
     return
 
 
 # Переключаем режим пользователя
 def toggle_mode(chat_id, mode):
-    r.set("users:%s:mode" % chat_id, mode)
+    r.set("%s:mode" % chat_id, mode)
     return
 
 
 # Проверяем режим пользователя
 def get_mode(chat_id):
     try:
-        return r.get("users:%s:mode" % chat_id)
+        return r.get("%s:mode" % chat_id)
     except Exception:
         return None
 
 
-def show_filter(chat_id, message_id):
-    return gen_inl_filters('get_all_filters', chat_id, message_id)
-
-
 # Получаем содержимое фильтра
 def get_filter(chat_id, filter):
-    return r.get("filter:%s:%s" % (chat_id, filter))
+    return r.get("%s:filter:%s" % (chat_id, filter))
 
 
 def get_filter_by_id(chat_id, event_id):
-    keys = r.keys("buffer:%s:*:%s" % (chat_id, event_id))
+    keys = r.keys("%s:buffer:*:%s" % (chat_id, event_id))
     if len(keys) > 0:
         return keys[0].split(":")[2]
     else:
@@ -113,7 +106,7 @@ def get_filter_by_id(chat_id, event_id):
 # Получаем список всех фильтров
 def get_all_filters(chat_id=''):
     filters = []
-    for f in r.keys("filter:%s:*" % chat_id):
+    for f in r.keys("%s:filter:*" % chat_id):
         filter = f.split(':')[2]
         filters.append(filter)
     return filters
@@ -122,7 +115,7 @@ def get_all_filters(chat_id=''):
 # Получаем список всех фильтров
 def get_new_filters(chat_id=''):
     filters = []
-    for f in r.keys("new:%s:*" % chat_id):
+    for f in r.keys("%s:new:*" % chat_id):
         filter = f.split(':')[2]
         filters.append(filter)
     return filters
@@ -145,10 +138,10 @@ def gen_inl_markup(menu, message_id, action):
     row = []
     if isinstance(menu, dict):
         for t, d in menu.items():
-            row.append(types.InlineKeyboardButton(text=t, callback_data='%s_%s_%s' % (d, message_id, action)))
+            row.append(types.InlineKeyboardButton(text=t, callback_data='%s_%s_%s' % (action, message_id, d)))
     if isinstance(menu, list):
         for t in menu:
-            row.append(types.InlineKeyboardButton(text=t, callback_data='%s_%s_%s' % (t, message_id, action)))
+            row.append(types.InlineKeyboardButton(text=t, callback_data='%s_%s_%s' % (action, message_id, t)))
     if len(row) == 0:
         return None
     markup.add(*row)
@@ -157,7 +150,7 @@ def gen_inl_markup(menu, message_id, action):
 
 
 # Генерим инлайн кнопками список нужных фильтров
-def gen_inl_filters(type, chat_id, message_id, action='none'):
+def gen_inl_filters(type, chat_id, message_id, action):
     # Получаем кнопки, которые надо сгенерить определенному пользователю
     filters = getattr(this, type)(chat_id)
     if len(filters) == 0:
@@ -170,54 +163,54 @@ def gen_inl_filters(type, chat_id, message_id, action='none'):
 # Удаляем фильтр из базы
 def delete_filter(chat_id, filter, category):
     if category == 'canceled':
-        r.delete("new:%s:%s" % (chat_id, filter))
-        r.delete("filter:%s:%s" % (chat_id, filter))
+        r.delete("%s:new:%s" % (chat_id, filter))
+        r.delete("%s:filter:%s" % (chat_id, filter))
     elif category == 'new':
-        r.delete("new:%s:%s" % (chat_id, filter))
+        r.delete("%s:new:%s" % (chat_id, filter))
     else:
         if filter == 'Без категории':
             return "Фильтр Без категории не может быть удален т.к. является фильтром по-умолчанию"
         entry = str(r.get("filter:%s:%s" % (chat_id, filter)))
-        r.set("deleted:%s:%s" % (chat_id, filter), entry)
-        r.delete("filter:%s:%s" % (chat_id, filter))
-        r.delete("new:%s:%s" % (chat_id, filter))
+        r.set("%s:deleted:%s" % (chat_id, filter), entry)
+        r.delete("%s:filter:%s" % (chat_id, filter))
+        r.delete("%s:new:%s" % (chat_id, filter))
         unset_filter(chat_id, filter)
     return "Фильтр %s удален" % filter
 
 
 # Изменяем фильтр
 def edit_filter(chat_id, filter, regex):
-    entry = str(r.get("filter:%s:%s" % (chat_id, filter)))
-    r.set("edited:%s:%s" % (chat_id, filter), entry)
-    r.set("filter:%s:%s" % (chat_id, filter), regex)
+    entry = str(r.get("%s:filter:%s" % (chat_id, filter)))
+    r.set("%s:edited:%s" % (chat_id, filter), entry)
+    r.set("%s:filter:%s" % (chat_id, filter), regex)
     return
 
 
 # Создаем фильтрр
 def create_filter(chat_id, filter):
-    r.set("filter:%s:%s" % (chat_id, filter), '')
-    r.set("new:%s:%s" % (chat_id, filter), '')
+    r.set("%s:filter:%s" % (chat_id, filter), '')
+    r.set("%s:new:%s" % (chat_id, filter), '')
     return
 
 
 # Добавляем фильтр в активные
 def set_filter(chat_id, filter):
-    r.lpush("users:%s:active" % chat_id, filter)
+    r.lpush("%s:active" % chat_id, filter)
     return "Подписка \"%s\" включена" % filter
 
 
 # Добавляем фильтр в неактивные
 def unset_filter(chat_id, filter):
-    r.lrem("users:%s:active" % chat_id, filter)
+    r.lrem("%s:active" % chat_id, filter)
     return "Подписка \"%s\" отключена" % filter
 
 
 # Получаем спосик активных фильтров
 def get_active_filters(chat_id):
-    chk = r.keys("users:%s:active" % chat_id)
+    chk = r.keys("%s:active" % chat_id)
     if len(chk) == 0:
         return []
-    a_list = r.lrange("users:%s:active" % chat_id, 0, 100)
+    a_list = r.lrange("%s:active" % chat_id, 0, 100)
     return a_list
 
 
@@ -237,25 +230,13 @@ def check_filter(chat_id, filter):
         return True
 
 
-# Получаем список всех пользователей
-def get_users():
-    users = []
-    for k in r.keys('users:*'):
-        user = k.split(':')[1]
-        if user in users:
-            continue
-        else:
-            users.append(user)
-    return users
-
-
 # Классифицируем сообщение под какой-либо шаблон
 def sort(chat_id, title, body):
     filters = []
     for f in get_all_filters(chat_id):
         if f == 'Без категории':
             continue
-        mask = r.get("filter:%s:%s" % (chat_id, f))
+        mask = r.get("%s:filter:%s" % (chat_id, f))
         if re.match(mask, title + body, re.MULTILINE | re.DOTALL) is not None:
             filters.append(f)
     if len(filters) > 0:
@@ -265,11 +246,11 @@ def sort(chat_id, title, body):
 
 # Записываем сообщение в буфер, получаем идентификатор сообщения
 def to_buffer(chat_id, filter, title, body):
-    id = str(uuid.uuid4())[:13]
-    r.hmset('buffer:%s:%s:%s' % (chat_id, filter, id), {'title': title, 'body': body, 'time': datetime.now().strftime(
+    uid = str(uuid.uuid4())
+    r.hmset('%s:buffer:%s:%s' % (chat_id, filter, uid), {'title': title, 'body': body, 'time': datetime.now().strftime(
         '%Y-%m-%d %H:%M:%S')})
-    r.expire('buffer:%s:%s:%s' % (chat_id, filter, id), 86400)
-    return id
+    r.expire('%s:buffer:%s:%s' % (chat_id, filter, uid), 86400)
+    return uid
 
 
 # Генерим кнопку для подробной информации об аларме
@@ -277,7 +258,7 @@ def get_event_data(event_id, message_id):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     keyboard.add(
         types.InlineKeyboardButton(text="Подробнее",
-                                   callback_data='%s_%s_%s' % (event_id, message_id, 'show')))
+                                   callback_data='%s_%s_%s' % ('show', event_id, message_id)))
     return keyboard
 
 
@@ -286,17 +267,16 @@ def hide_event_data(event_id, message_id):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     keyboard.add(
         types.InlineKeyboardButton(text="Скрыть",
-                                   callback_data='%s_%s_%s' % (event_id, message_id, 'hide')))
+                                   callback_data='%s_%s_%s' % ('hide', event_id, message_id)))
     return keyboard
 
 
 # Получаем сообщение из буфера по id
-def from_buffer(chat_id, id):
+def from_buffer(chat_id, event_id):
     try:
-        path = r.keys('buffer:%s:*:%s' % (chat_id, id))
+        path = r.keys('%s:buffer:*:%s' % (chat_id, event_id))
         return r.hgetall(path[0])
     except Exception:
-        # return {'title': 'Ой!', 'body': 'Сообщение было удалено из буфера по таймауту', 'time': 'Более 24 часов назад'}
         return None
 
 
@@ -305,12 +285,12 @@ def get_counter(chat_id, offset=0, filter=''):
     counters = {}
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     if filter == '':
-        buffer = r.keys('buffer:%s*' % chat_id)
+        buffer = r.keys('%s:buffer:*' % chat_id)
         if len(buffer) == 0:
             return False
         for f in buffer:
             filter = f.split(':')[2]
-            count = len(r.keys('buffer:%s:%s:*' % (chat_id, filter)))
+            count = len(r.keys('%s:buffer:%s:*' % (chat_id, filter)))
             counters.update({filter: count - offset})
         for c in counters:
             keyboard.add(types.InlineKeyboardButton(text='%s (%s)' % (c, str(counters[c])),
@@ -337,7 +317,7 @@ def import_filter(chat_id, import_data):
     result = {}
     for name, regex in data.items():
         if ":" in name or "_" in name:
-            text = 'Использование символов \":\" и \"_\" в названии фильтра недопустимо'
+            return 'Использование символов \":\" и \"_\" в названии фильтра недопустимо'
         if isinstance(regex, str):
             try:
                 re.compile(regex)
@@ -345,7 +325,7 @@ def import_filter(chat_id, import_data):
             except re.error:
                 is_valid = False
             if is_valid is True:
-                status = r.set("filter:%s:%s" % (chat_id, name), regex)
+                status = r.set("%s:filter:%s" % (chat_id, name), regex)
                 if status is True:
                     result[name] = "ОК"
                 else:
@@ -358,4 +338,4 @@ def import_filter(chat_id, import_data):
 
 
 def get_alarm_by_filter(chat_id, filter):
-    return r.keys('buffer:%s:%s:*' % (chat_id, filter))
+    return r.keys('%s:buffer:%s:*' % (chat_id, filter))

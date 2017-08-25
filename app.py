@@ -20,47 +20,9 @@ def start(message):
     print("bot started with %s %s" % (message.chat.username, message.chat.id))
     utils.new_user(message.chat.id)
     bot.send_message(message.chat.id,
-                     "Ваш ID %s\nПеред использованием настройте фильтры\nДля просмотра доступных команд наберите /help" % message.chat.id,
+                     "Ваш ID %s\nПеред использованием настройте фильтры\n"
+                     "Для просмотра доступных команд наберите /help" % message.chat.id,
                      reply_markup=utils.gen_markup(utils.main_menu))
-
-
-@bot.message_handler(commands=['help'])
-def start(message):
-    bot.send_message(message.chat.id,
-                     "/start - начать работу с ботом\n/reset - удалить все свои настройки\n"
-                     "/edit - войти в режим редактирования фильтров\n/track - войти в режим получения уведомлений\n"
-                     "/help - посмотреть список команд")
-
-
-# Ловим команду для ресета
-@bot.message_handler(commands=['reset'])
-def reset(message):
-    utils.reset_user(message.chat.id)
-    bot.send_message(message.chat.id,
-                     "/start - начать работу с ботом\n/reset - удалить все свои настройки\n"
-                     "/edit - войти в режим редактирования фильтров\n/track - войти в режим получения уведомлений\n"
-                     "/help - посмотреть список команд",
-                     reply_markup=telebot.types.ReplyKeyboardRemove(selective=False))
-
-
-# Ловим команду для входа в режим редактирования
-@bot.message_handler(commands=['edit'])
-def edit(message):
-    markup = None
-    markup = utils.gen_markup(utils.edit_menu)
-    utils.toggle_mode(message.chat.id, 'edit')
-    text = 'Вы вошли в режим редактирования\nДля возврата в режим просмотра наберите /track'
-    bot.send_message(message.chat.id, text, reply_markup=markup)
-
-
-# Ловим команду для входа в режим просмотра
-@bot.message_handler(commands=['track'])
-def track(message):
-    markup = None
-    markup = utils.gen_markup(utils.main_menu)
-    utils.toggle_mode(message.chat.id, 'track')
-    text = 'Вы вошли в режим просмотра\nДля входа в режим редактирования наберите /edit'
-    bot.send_message(message.chat.id, text, reply_markup=markup)
 
 
 # Работа с текстом в режиме ввода имени фильтра
@@ -79,7 +41,8 @@ def input_regex(message):
             if filter not in utils.get_all_filters(message.chat.id):
                 utils.create_filter(message.chat.id, filter)
                 utils.toggle_mode(message.chat.id, filter)
-                text = 'Введите регулярное выражение для фильтра %s\nhttp://www.exlab.net/files/tools/sheets/regexp/regexp.pdf' % filter
+                text = 'Введите регулярное выражение для фильтра %s\n' \
+                       'http://www.exlab.net/files/tools/sheets/regexp/regexp.pdf' % filter
             else:
                 text = 'Фильтр %s уже существует, выберите другое имя' % filter
     bot.send_message(message.chat.id, text, reply_markup=markup)
@@ -190,6 +153,11 @@ def buttons(message):
         text2 = 'Введите данные для импорта в формате {"filer1":"regexp1","filter2":"regexp2"}'
         utils.toggle_mode(message.chat.id, 'import')
 
+        # Если хотим выбрать меню
+    elif message.text == 'Меню':
+        markup = utils.gen_inl_markup(utils.mode_menu, request.message_id, "menu")
+        text = 'Выберите действие'
+
     # Если не знаем кнопки, то ничего не делаем
     else:
         text = 'Неизвестная команда'
@@ -212,7 +180,7 @@ def buttons(message):
     request = bot.send_message(message.chat.id, text, reply_markup=markup, parse_mode='HTML')
     # Если хотим активировать фильтр
     if message.text == 'Подписаться':
-        markup = utils.gen_inl_filters('get_inactive_filters', message.chat.id, request.message_id)
+        markup = utils.gen_inl_filters('get_inactive_filters', message.chat.id, request.message_id, 'control')
         if markup is None:
             text = "Нет доступных подписок"
         else:
@@ -221,7 +189,7 @@ def buttons(message):
 
     # Если хотим деактивировать фильтр
     elif message.text == 'Отписаться':
-        markup = utils.gen_inl_filters('get_active_filters', message.chat.id, request.message_id)
+        markup = utils.gen_inl_filters('get_active_filters', message.chat.id, request.message_id, 'control')
         if markup is None:
             text = "Нет активных подписок"
         else:
@@ -245,6 +213,11 @@ def buttons(message):
         else:
             text = 'Статистика по всем фильтрам за последние 24 часа:\n'
 
+    # Если хотим выбрать меню
+    elif message.text == 'Меню':
+        markup = utils.gen_inl_markup(utils.mode_menu, request.message_id, "menu")
+        text = 'Выберите действие'
+
     # Если не знаем кнопки, то ничего не делаем
     else:
         text = 'Неизвестная команда'
@@ -254,148 +227,194 @@ def buttons(message):
 
 
 # Получаем тело фильра
-@bot.callback_query_handler(func=lambda call: (
-        call.data.split('_')[0] in utils.get_all_filters(call.message.chat.id) and utils.get_mode(
-            call.message.chat.id) == 'edit'))
-def get_filter(call):
-    data, message_id, action = call.data.split('_')
-    text = '...'
-    text2 = 'Выберите фильтр'
-    markup = None
-    reply = bot.send_message(chat_id=call.message.chat.id, text='...')
-    if action == 'show':
-        text = "Фильтр %s:\n%s" % (data, utils.get_filter(call.message.chat.id, data))
-        text2 = 'Выберите фильтр для просмотра'
-        markup = utils.gen_inl_filters('get_all_filters', call.message.chat.id, reply.message_id, action)
-    elif action == 'delete':
-        text = utils.delete_filter(call.message.chat.id, data, 'purged')
-        text2 = 'Выберите фильтр для удаления'
-        markup = utils.gen_inl_filters('get_all_filters', call.message.chat.id, reply.message_id, action)
-    elif action == 'edit':
-        if data == 'Без категории':
-            text = 'Вы не можете редактировать значение фильтра по умолчанию'
-            utils.toggle_mode(call.message.chat.id, 'edit')
-        else:
-            utils.toggle_mode(call.message.chat.id, data)
-            text = "Редактирование фильтра %s\nТекущее значение:\n%s" % (
-                data, utils.get_filter(call.message.chat.id, data))
-            text2 = "Введите регулярное выражение\nhttp://www.exlab.net/files/tools/sheets/regexp/regexp.pdf"
-
-    if action in ['show', 'delete']:
-        bot.edit_message_text(chat_id=call.message.chat.id, text=text2,
-                              message_id=reply.message_id, reply_markup=markup)
-
-        bot.edit_message_text(chat_id=call.message.chat.id, text=text,
+def get_filter(chat_id, data):
+    action, message_id, filter = data.split('_')
+    if filter not in utils.get_all_filters(chat_id):
+        text = "Выбранный фильтр не существует"
+        bot.edit_message_text(chat_id=chat_id, text=text,
                               message_id=message_id)
-    elif action == "edit":
-        bot.edit_message_text(chat_id=call.message.chat.id, text=text,
-                              message_id=reply.message_id, reply_markup=markup)
-        if data != 'Без категории':
-            bot.send_message(call.message.chat.id, text=text2, reply_markup=utils.gen_markup(utils.cancel))
+    else:
+        text = '...'
+        text2 = 'Выберите фильтр'
+
+        # Шлем сообщение, которое будем изменять
+        reply = bot.send_message(chat_id=chat_id, text=text)
+        if action == 'delete':
+            text = utils.delete_filter(chat_id, filter, 'purged')
+            text2 = 'Выберите фильтр для удаления'
+            markup = utils.gen_inl_filters('get_all_filters', chat_id, reply.message_id, action)
+        elif action == 'edit':
+            markup = None
+            if filter == 'Без категории':
+                text = 'Вы не можете редактировать значение фильтра по умолчанию'
+                utils.toggle_mode(chat_id, 'edit')
+            else:
+                utils.toggle_mode(chat_id, filter)
+                text = "Редактирование фильтра %s\nТекущее значение:\n%s" % (
+                    filter, utils.get_filter(chat_id, filter))
+                text2 = "Введите регулярное выражение\nhttps://devaka.ru/wp-content/uploads/2014/06/1599.png"
+        else:
+            text = "Фильтр %s:\n%s" % (filter, utils.get_filter(chat_id, filter))
+            text2 = 'Выберите фильтр для просмотра'
+            markup = utils.gen_inl_filters('get_all_filters', chat_id, reply.message_id, action)
+
+        if action in ['show', 'delete']:
+            bot.edit_message_text(chat_id=chat_id, text=text2,
+                                  message_id=reply.message_id, reply_markup=markup)
+
+            bot.edit_message_text(chat_id=chat_id, text=text,
+                                  message_id=message_id)
+        elif action == "edit":
+            bot.edit_message_text(chat_id=chat_id, text=text,
+                                  message_id=reply.message_id, reply_markup=markup)
+            if filter != 'Без категории':
+                bot.send_message(chat_id, text=text2, reply_markup=utils.gen_markup(utils.cancel))
+    return
 
 
 # Активируем или деактивируем фильтр
-@bot.callback_query_handler(func=lambda call: (
-        call.data.split('_')[0] in utils.get_all_filters(call.message.chat.id) and utils.get_mode(
-            call.message.chat.id) == 'track'))
-def control_filter(call):
-    data, message_id, action = call.data.split('_')
-    reply = bot.send_message(chat_id=call.message.chat.id, text='...')
-    # Если фильтр есть в неактивных, то включаем его
-    if data in utils.get_inactive_filters(call.message.chat.id):
-        text = utils.set_filter(call.message.chat.id, data)
-        markup = utils.gen_inl_filters('get_inactive_filters', call.message.chat.id, reply.message_id)
-        if markup is None:
-            text2 = "Нет доступных подписок"
-        else:
-            text2 = "Выберите подписку"
-    # Если фильтр есть в активных, то выключаем его
-    elif data in utils.get_active_filters(call.message.chat.id):
-        text = utils.unset_filter(call.message.chat.id, data)
-        markup = utils.gen_inl_filters('get_active_filters', call.message.chat.id, reply.message_id)
-        if markup is None:
+def control_filter(chat_id, data):
+    action, message_id, filter = data.split('_')
+    if filter not in utils.get_all_filters(chat_id):
+        text = "Выбранная подписка не существует"
+        bot.edit_message_text(chat_id=chat_id, text=text,
+                              message_id=message_id)
+    else:
+        reply = bot.send_message(chat_id=chat_id, text='...')
+        # Если фильтр есть в неактивных, то включаем его
+        if filter in utils.get_active_filters(chat_id):
+            text = utils.unset_filter(chat_id, filter)
+            mark_func = 'get_active_filters'
             text2 = "Нет активных подписок"
         else:
+            text = utils.set_filter(chat_id, filter)
+            mark_func = 'get_inactive_filters'
+            text2 = "Нет доступных подписок"
+        markup = utils.gen_inl_filters(mark_func, chat_id, reply.message_id, 'control')
+        if markup is not None:
             text2 = "Выберите подписку"
-    # Какой-то некорректный фильтр
-    else:
-        text2 = "Некорректное имя подписки"
-        markup = None
-    # Собираем сообщение и изменяем первое сообщение
 
-    bot.edit_message_text(chat_id=call.message.chat.id, text=text2,
-                          message_id=reply.message_id, reply_markup=markup)
+        # Собираем сообщение и изменяем первое сообщение
+        bot.edit_message_text(chat_id=chat_id, text=text2,
+                              message_id=reply.message_id, reply_markup=markup)
 
-    bot.edit_message_text(chat_id=call.message.chat.id, text=text,
-                          message_id=message_id)
+        bot.edit_message_text(chat_id=chat_id, text=text,
+                              message_id=message_id)
+    return
 
 
 # Обработка запросов на получение статистики:
-@bot.callback_query_handler(
-    func=lambda call: (call.data[:4] == 'stat') and utils.get_mode(call.message.chat.id) == 'track')
-def get_stat(call):
-    offset = int(call.data.split('_')[1])
-    filter = call.data.split('_')[2]
-    alarms = utils.get_alarm_by_filter(call.message.chat.id, filter)
+def get_stat(chat_id, data):
+    offset = int(data('_')[1])
+    filter = data('_')[2]
+    alarms = utils.get_alarm_by_filter(chat_id, filter)
     raw_alarms = []
     for a in alarms:
-        id = str(a.split(':')[3])
-        buffer = utils.from_buffer(call.message.chat.id, id)
-        buffer['id'] = id
+        event_id = a.split(':')[3]
+        buffer = utils.from_buffer(chat_id, event_id)
+        buffer['id'] = event_id
         raw_alarms.append(buffer)
     sorted_alarms = sorted(raw_alarms, key=itemgetter('time'), reverse=True)
     for s in reversed(sorted_alarms[offset:offset + 5]):
-        # time = datetime.strptime(s["time"], '%Y-%m-%d %H:%M:%S')
-        title = s["time"] + '\n' + s["title"]
-        send_to_chat(call.message.chat.id, title, s['id'])
+        title = '%s\n%s' % (s["time"], s["title"])
+        send_to_chat(chat_id, title, s['id'])
     remains = len(sorted_alarms) - (offset + 5)
     if remains > 0:
-        bot.send_message(call.message.chat.id, "Осталось сообщений: %s" % remains,
-                         reply_markup=utils.get_counter(call.message.chat.id, offset + 5, filter))
+        bot.send_message(chat_id, "Осталось сообщений: %s" % remains,
+                         reply_markup=utils.get_counter(chat_id, offset + 5, filter))
+    return
 
 
 # Обработка запросов на получение подробной информации:
-@bot.callback_query_handler(func=lambda call: utils.get_mode(call.message.chat.id) == 'track')
-def show_body(call):
-    # Извлекаем id сообщения в zabbix
-    id, msg, action = str(call.data).split('_')
-    filter = utils.get_filter_by_id(call.message.chat.id, id)
-    buffer = utils.from_buffer(call.message.chat.id, id)
+def show_body(chat_id, data):
+    # Извлекаем действие, id события и id сообщения для обновления
+    action, event_id, msg_id = str(data).split('_')
+    msg_id = int(msg_id)
+    # Получаем имя фильтра по id сообщения
+    filter = utils.get_filter_by_id(chat_id, event_id)
+    # Выгружаем из буфера сообщение с нужным id
+    buffer = utils.from_buffer(chat_id, event_id)
+    # Если сообщение с искомым id еще находится в буфере, то формируем тело сообщение согласно action
     if buffer is not None:
-        title = buffer["time"] + '\n' + buffer["title"]
+        title = ('%s\n%s') % (buffer["time"], buffer["title"])
         body = buffer["body"]
 
         if action == 'show':
+            markup = utils.hide_event_data(event_id, msg_id)
             text = "<b>%s</b>\n%s\n%s" % (filter, title, body)
-            bot.edit_message_text(chat_id=call.message.chat.id, message_id=int(msg), text=text, parse_mode='HTML',
-                                  reply_markup=utils.hide_event_data(id, msg))
-        if action == 'hide':
+        else:
+            markup = utils.get_event_data(event_id, msg_id)
             text = "<b>%s</b>\n%s\n" % (filter, title)
-            bot.edit_message_text(chat_id=call.message.chat.id, message_id=int(msg), text=text, parse_mode='HTML',
-                                  reply_markup=utils.get_event_data(id, msg))
+        bot.edit_message_text(chat_id=chat_id, message_id=msg_id, text=text, parse_mode='HTML',
+                              reply_markup=markup)
+    # Если сообщения было удалено из буфера, то генерим соответсвующий ответ
     else:
-        bot.send_message(call.message.chat.id, 'Сообщение было удалено по таймауту', reply_to_message_id=int(msg))
+        bot.send_message(chat_id, 'Сообщение было удалено по таймауту', reply_to_message_id=msg_id)
+    return
+
+
+def show_menu(chat_id, data):
+    action, message_id, menu = data.split('_')
+    text = '...'
+    if menu == 'Режим просмотра':
+        markup = utils.gen_markup(utils.main_menu)
+        utils.toggle_mode(chat_id, 'track')
+        text = 'Вы вошли в режим просмотра'
+    elif menu == 'Режим настройки':
+        markup = utils.gen_markup(utils.edit_menu)
+        utils.toggle_mode(chat_id, 'edit')
+        text = 'Вы вошли в режим редактирования'
+    elif menu == 'Сброс настроек':
+        utils.reset_user(chat_id)
+        text = "/start - начать работу с ботом"
+        markup = telebot.types.ReplyKeyboardRemove(selective=False)
+    bot.delete_message(chat_id=chat_id, message_id=message_id)
+    bot.send_message(chat_id=chat_id, text=text, reply_markup=markup)
+    return
+
+
+# Обработка всех вызовов от инлайн кнопок
+@bot.callback_query_handler(func=lambda call: True)
+def sort_call(call):
+    action = str(call.data).split('_')[0]
+    chat_id = call.message.chat.id
+    mode = utils.get_mode(chat_id)
+    if mode == 'track':
+        if action in ['show', 'hide']:
+            show_body(chat_id, call.data)
+        elif action == 'stat':
+            get_stat(chat_id, call.data)
+        elif action == 'control':
+            control_filter(chat_id, call.data)
+        elif action == 'menu':
+            show_menu(chat_id, call.data)
+    elif mode == 'edit':
+        if action in ['show', 'edit', 'delete']:
+            get_filter(chat_id, call.data)
+        elif action == 'menu':
+            show_menu(chat_id, call.data)
 
 
 # Отправляем заголовок сообщения в нужный чат
-def send_to_chat(chatid, title, id):
-    filter = utils.get_filter_by_id(chatid, id)
+def send_to_chat(chatid, title, event_id):
+    filter = utils.get_filter_by_id(chatid, event_id)
     if utils.get_mode(chatid) != 'track':
         return
     text = "<b>%s</b>\n%s\n" % (filter, title)
     first = bot.send_message(parse_mode='HTML', chat_id=chatid, text=text)
     bot.edit_message_reply_markup(chat_id=chatid, message_id=first.message_id,
                                   reply_markup=utils.get_event_data(id, first.message_id))
+    return
 
 
 # Функция для старта поллинга бота
 def start_telebot():
     while True:
-        try:
-            print('Running telegram bot listener')
-            bot.polling(none_stop=True)
-        except Exception:
-            continue
+        # try:
+        print('Running telegram bot listener')
+        bot.polling(none_stop=True)
+        # except Exception:
+        #   continue
 
 
 # Обрабатываем очередь в пуле в 10 потоков
