@@ -21,10 +21,11 @@ r = redis.Redis(connection_pool=pool)
 
 qbus = Queue()
 
-main_menu = ["Подписаться", "Отписаться", "Активные подписки", "История событий", "Меню"]
+start_menu = ["Меню"]
+track_menu = ["Подписаться", "Отписаться", "Активные подписки", "История событий", "Назад"]
 edit_menu = ["Посмотреть фильтр", "Добавить фильтр", "Редактировать фильтр", "Удалить фильтр", "Экспорт", "Импорт",
-             "Меню"]
-mode_menu = ["Режим просмотра", "Режим настройки", "Сброс настроек"]
+             "Назад"]
+main_menu = ["Режим просмотра", "Режим настройки", "Сброс настроек"]
 cancel = ['Отмена']
 
 
@@ -40,14 +41,14 @@ class Parser(threading.Thread):
             # Обрабатываем событие
             chat_id, title, body = queue_item[0], queue_item[1], queue_item[2]
             # Определяем к какой группе относится событие
-            filters = sort(chat_id, title, body)
-            for f in filters:
+            rules = sort(chat_id, title, body)
+            for f in rules:
                 # Запмсываем в буфер, получаем идентификатор
-                id = to_buffer(chat_id, f, title, body)
+                event_id = to_buffer(chat_id, f, title, body)
                 # Для всех пользователей у кого активен фильтр отправляем сообщение
                 # for user in get_users():
-                if check_filter(chat_id, f) is True:
-                    send_to_chat(chat_id, title, id)
+                if check_rule(chat_id, f) is True:
+                    send_to_chat(chat_id, title, event_id)
             continue
 
 
@@ -71,7 +72,7 @@ def reset_user(chat_id):
 def new_user(chat_id):
     reset_user(chat_id)
     toggle_mode(chat_id, 'track')
-    r.set("%s:filter:Без категории" % chat_id, '')
+    r.set("%s:filters:Без категории" % chat_id, '')
     r.lpush("%s:active" % chat_id, 'Без категории')
     return
 
@@ -91,11 +92,11 @@ def get_mode(chat_id):
 
 
 # Получаем содержимое фильтра
-def get_filter(chat_id, filter):
-    return r.get("%s:filter:%s" % (chat_id, filter))
+def get_rule_expr(chat_id, rule):
+    return r.get("%s:filters:%s" % (chat_id, rule))
 
 
-def get_filter_by_id(chat_id, event_id):
+def get_rule_by_id(chat_id, event_id):
     keys = r.keys("%s:buffer:*:%s" % (chat_id, event_id))
     if len(keys) > 0:
         return keys[0].split(":")[2]
@@ -104,21 +105,21 @@ def get_filter_by_id(chat_id, event_id):
 
 
 # Получаем список всех фильтров
-def get_all_filters(chat_id=''):
-    filters = []
-    for f in r.keys("%s:filter:*" % chat_id):
-        filter = f.split(':')[2]
-        filters.append(filter)
-    return filters
+def get_all_rules(chat_id=''):
+    rules = []
+    for f in r.keys("%s:filters:*" % chat_id):
+        rule = f.split(':')[2]
+        rules.append(rule)
+    return rules
 
 
 # Получаем список всех фильтров
-def get_new_filters(chat_id=''):
-    filters = []
+def get_new_rules(chat_id=''):
+    rules = []
     for f in r.keys("%s:new:*" % chat_id):
-        filter = f.split(':')[2]
-        filters.append(filter)
-    return filters
+        rule = f.split(':')[2]
+        rules.append(rule)
+    return rules
 
 
 # Генерим жесткие кнопки меню
@@ -133,7 +134,7 @@ def gen_markup(menu):
 
 
 # Генерим инлайн кнопки
-def gen_inl_markup(menu, message_id, action):
+def gen_inl_buttons(menu, message_id, action):
     markup = types.InlineKeyboardMarkup(row_width=2)
     row = []
     if isinstance(menu, dict):
@@ -142,71 +143,68 @@ def gen_inl_markup(menu, message_id, action):
     if isinstance(menu, list):
         for t in menu:
             row.append(types.InlineKeyboardButton(text=t, callback_data='%s_%s_%s' % (action, message_id, t)))
-    if len(row) == 0:
-        return None
     markup.add(*row)
-
     return markup
 
 
 # Генерим инлайн кнопками список нужных фильтров
-def gen_inl_filters(type, chat_id, message_id, action):
+def gen_inl_markup(mark_func, chat_id, message_id, action, back=None):
     # Получаем кнопки, которые надо сгенерить определенному пользователю
-    filters = getattr(this, type)(chat_id)
-    if len(filters) == 0:
-        return None
+    rules = getattr(this, mark_func)(chat_id)
     # Генерим инлайн кнопки по списку
-    markup = gen_inl_markup(filters, message_id, action)
+    markup = gen_inl_buttons(rules, message_id, action)
+    if back is not None:
+        markup.add(types.InlineKeyboardButton(text='Назад', callback_data='%s_%s_%s' % (back, message_id,'Назад')))
     return markup
 
 
 # Удаляем фильтр из базы
-def delete_filter(chat_id, filter, category):
+def delete_rule(chat_id, rule, category):
     if category == 'canceled':
-        r.delete("%s:new:%s" % (chat_id, filter))
-        r.delete("%s:filter:%s" % (chat_id, filter))
+        r.delete("%s:new:%s" % (chat_id, rule))
+        r.delete("%s:filters:%s" % (chat_id, rule))
     elif category == 'new':
-        r.delete("%s:new:%s" % (chat_id, filter))
+        r.delete("%s:new:%s" % (chat_id, rule))
     else:
-        if filter == 'Без категории':
+        if rule == 'Без категории':
             return "Фильтр Без категории не может быть удален т.к. является фильтром по-умолчанию"
-        entry = str(r.get("filter:%s:%s" % (chat_id, filter)))
-        r.set("%s:deleted:%s" % (chat_id, filter), entry)
-        r.delete("%s:filter:%s" % (chat_id, filter))
-        r.delete("%s:new:%s" % (chat_id, filter))
-        unset_filter(chat_id, filter)
-    return "Фильтр %s удален" % filter
+        entry = str(r.get("rule:%s:%s" % (chat_id, rule)))
+        r.set("%s:deleted:%s" % (chat_id, rule), entry)
+        r.delete("%s:filters:%s" % (chat_id, rule))
+        r.delete("%s:new:%s" % (chat_id, rule))
+        unsubscribe(chat_id, rule)
+    return "Фильтр %s удален" % rule
 
 
 # Изменяем фильтр
-def edit_filter(chat_id, filter, regex):
-    entry = str(r.get("%s:filter:%s" % (chat_id, filter)))
-    r.set("%s:edited:%s" % (chat_id, filter), entry)
-    r.set("%s:filter:%s" % (chat_id, filter), regex)
+def edit_rule(chat_id, rule, regex):
+    entry = str(r.get("%s:filters:%s" % (chat_id, rule)))
+    r.set("%s:edited:%s" % (chat_id, rule), entry)
+    r.set("%s:filters:%s" % (chat_id, rule), regex)
     return
 
 
 # Создаем фильтрр
-def create_filter(chat_id, filter):
-    r.set("%s:filter:%s" % (chat_id, filter), '')
-    r.set("%s:new:%s" % (chat_id, filter), '')
+def create_rule(chat_id, rule):
+    r.set("%s:filters:%s" % (chat_id, rule), '')
+    r.set("%s:new:%s" % (chat_id, rule), '')
     return
 
 
 # Добавляем фильтр в активные
-def set_filter(chat_id, filter):
-    r.lpush("%s:active" % chat_id, filter)
-    return "Подписка \"%s\" включена" % filter
+def subscribe(chat_id, rule):
+    r.lpush("%s:active" % chat_id, rule)
+    return "Подписка \"%s\" включена" % rule
 
 
 # Добавляем фильтр в неактивные
-def unset_filter(chat_id, filter):
-    r.lrem("%s:active" % chat_id, filter)
-    return "Подписка \"%s\" отключена" % filter
+def unsubscribe(chat_id, rule):
+    r.lrem("%s:active" % chat_id, rule)
+    return "Подписка \"%s\" отключена" % rule
 
 
 # Получаем спосик активных фильтров
-def get_active_filters(chat_id):
+def get_active_rules(chat_id):
     chk = r.keys("%s:active" % chat_id)
     if len(chk) == 0:
         return []
@@ -215,41 +213,41 @@ def get_active_filters(chat_id):
 
 
 # Получаем список неактивных фильтров
-def get_inactive_filters(chat_id):
-    active_list = get_active_filters(chat_id)
-    all_list = get_all_filters(chat_id)
+def get_inactive_rules(chat_id):
+    active_list = get_active_rules(chat_id)
+    all_list = get_all_rules(chat_id)
     ina_list = list(set(all_list) - set(active_list))
     return ina_list
 
 
 # Проверяем отслеживает ли пользователь данную категорию
-def check_filter(chat_id, filter):
-    a_list = get_active_filters(chat_id)
-    ina_list = get_inactive_filters(chat_id)
-    if filter in a_list and filter not in ina_list:
+def check_rule(chat_id, rule):
+    a_list = get_active_rules(chat_id)
+    ina_list = get_inactive_rules(chat_id)
+    if rule in a_list and rule not in ina_list:
         return True
 
 
 # Классифицируем сообщение под какой-либо шаблон
 def sort(chat_id, title, body):
-    filters = []
-    for f in get_all_filters(chat_id):
+    rules = []
+    for f in get_all_rules(chat_id):
         if f == 'Без категории':
             continue
-        mask = r.get("%s:filter:%s" % (chat_id, f))
+        mask = r.get("%s:filters:%s" % (chat_id, f))
         if re.match(mask, title + body, re.MULTILINE | re.DOTALL) is not None:
-            filters.append(f)
-    if len(filters) > 0:
-        return filters
+            rules.append(f)
+    if len(rules) > 0:
+        return rules
     return ["Без категории"]
 
 
 # Записываем сообщение в буфер, получаем идентификатор сообщения
-def to_buffer(chat_id, filter, title, body):
+def to_buffer(chat_id, rule, title, body):
     uid = str(uuid.uuid4())
-    r.hmset('%s:buffer:%s:%s' % (chat_id, filter, uid), {'title': title, 'body': body, 'time': datetime.now().strftime(
+    r.hmset('%s:buffer:%s:%s' % (chat_id, rule, uid), {'title': title, 'body': body, 'time': datetime.now().strftime(
         '%Y-%m-%d %H:%M:%S')})
-    r.expire('%s:buffer:%s:%s' % (chat_id, filter, uid), 86400)
+    r.expire('%s:buffer:%s:%s' % (chat_id, rule, uid), 86400)
     return uid
 
 
@@ -258,7 +256,7 @@ def get_event_data(event_id, message_id):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     keyboard.add(
         types.InlineKeyboardButton(text="Подробнее",
-                                   callback_data='%s_%s_%s' % ('show', event_id, message_id)))
+                                   callback_data='%s_%s_%s' % ('show', message_id, event_id)))
     return keyboard
 
 
@@ -267,7 +265,7 @@ def hide_event_data(event_id, message_id):
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     keyboard.add(
         types.InlineKeyboardButton(text="Скрыть",
-                                   callback_data='%s_%s_%s' % ('hide', event_id, message_id)))
+                                   callback_data='%s_%s_%s' % ('hide', message_id, event_id)))
     return keyboard
 
 
@@ -281,35 +279,35 @@ def from_buffer(chat_id, event_id):
 
 
 # Получаем счетчики по всем фильтрам, формируем кнопки для них
-def get_counter(chat_id, offset=0, filter=''):
+def get_counter(chat_id, offset=0, rule=''):
     counters = {}
     keyboard = types.InlineKeyboardMarkup(row_width=1)
-    if filter == '':
+    if rule == '':
         buffer = r.keys('%s:buffer:*' % chat_id)
         if len(buffer) == 0:
             return False
         for f in buffer:
-            filter = f.split(':')[2]
-            count = len(r.keys('%s:buffer:%s:*' % (chat_id, filter)))
-            counters.update({filter: count - offset})
+            rule = f.split(':')[2]
+            count = len(r.keys('%s:buffer:%s:*' % (chat_id, rule)))
+            counters.update({rule: count - offset})
         for c in counters:
             keyboard.add(types.InlineKeyboardButton(text='%s (%s)' % (c, str(counters[c])),
                                                     callback_data='stat_%s_%s' % (offset, c)))
     else:
-        keyboard.add(types.InlineKeyboardButton(text='Показать еще', callback_data='stat_%s_%s' % (offset, filter)))
+        keyboard.add(types.InlineKeyboardButton(text='Показать еще', callback_data='stat_%s_%s' % (offset, rule)))
     return keyboard
 
 
 # Получаем список фильтров пользователя и формируем сообщение для экспорта
-def export_filters(chat_id):
-    filters = get_all_filters(chat_id)
+def export_rules(chat_id):
+    rules = get_all_rules(chat_id)
     export_data = {}
-    for f in filters:
-        export_data[f] = get_filter(chat_id, f)
-    return (json.dumps(export_data))
+    for f in rules:
+        export_data[f] = get_rule_expr(chat_id, f)
+    return json.dumps(export_data)
 
 
-def import_filter(chat_id, import_data):
+def import_rules(chat_id, import_data):
     try:
         data = json.loads(import_data)
     except Exception:
@@ -325,7 +323,7 @@ def import_filter(chat_id, import_data):
             except re.error:
                 is_valid = False
             if is_valid is True:
-                status = r.set("%s:filter:%s" % (chat_id, name), regex)
+                status = r.set("%s:filters:%s" % (chat_id, name), regex)
                 if status is True:
                     result[name] = "ОК"
                 else:
@@ -337,5 +335,5 @@ def import_filter(chat_id, import_data):
     return result
 
 
-def get_alarm_by_filter(chat_id, filter):
-    return r.keys('%s:buffer:%s:*' % (chat_id, filter))
+def get_events_by_rule(chat_id, rule):
+    return r.keys('%s:buffer:%s:*' % (chat_id, rule))
