@@ -320,7 +320,7 @@ def import_rules(chat_id, import_data):
     result = {}
     for name, regex in data.items():
         if len(name) > 20:
-            text = 'Длина имени фильтра не должна превышать 20 знаков'
+            return 'Длина имени фильтра не должна превышать 20 знаков'
         elif ":" in name or "_" in name:
             return 'Использование символов \":\" и \"_\" в названии фильтра недопустимо'
         if isinstance(regex, str):

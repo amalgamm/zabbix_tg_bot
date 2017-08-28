@@ -398,7 +398,6 @@ def sort_call(call):
 
 
 def send_to_chat(chat_id, title, event_id):
-    rule = utils.get_rule_by_id(chat_id, event_id)
     if utils.get_mode(chat_id) not in 'track':
         return
     text = "%s\n" % title
@@ -430,11 +429,11 @@ def reset_user(chat_id, data):
 # Функция для старта поллинга бота
 def start_telebot():
     while True:
-        # try:
-        print('Running telegram bot listener')
-        bot.polling(none_stop=True)
-        # except Exception:
-        #   continue
+        try:
+            print('Running telegram bot listener')
+            bot.polling(none_stop=True)
+        except Exception:
+            continue
 
 
 # Обрабатываем очередь в пуле в 10 потоков
