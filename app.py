@@ -5,7 +5,6 @@ import telebot
 import sys
 import utils
 import re
-import time
 
 from listener import start_listener
 from config import token
@@ -13,6 +12,7 @@ from threading import Thread
 from operator import itemgetter
 
 bot = telebot.TeleBot(token, skip_pending=True, threaded=True)
+this = sys.modules[__name__]
 
 
 # Ловим команду для старта
@@ -24,21 +24,24 @@ def start(message):
                      "Ваш ID:\n%s" % message.chat.id,
                      reply_markup=utils.gen_markup(utils.start_menu))
     main_message = bot.send_message(chat_id=message.chat.id, text="Перед использованием настройте фильтры")
-    markup = utils.gen_inl_buttons(utils.main_menu, main_message.message_id, "menu")
+    markup = utils.gen_inl_markup(utils.main_menu, main_message.message_id, "menu")
     bot.edit_message_reply_markup(chat_id=message.chat.id, message_id=main_message.message_id, reply_markup=markup)
 
 
 # Работа с текстом в режиме ввода имени фильтра
 @bot.message_handler(func=lambda message: utils.get_mode(message.chat.id) == 'input_name', content_types=["text"])
-def input_regex(message):
+def input_name(message):
+    main_message = bot.send_message(message.chat.id, '...')
     markup = None
     if message.text == 'Отмена':
-        utils.toggle_mode(message.chat.id, 'edit')
+        utils.toggle_mode(message.chat.id, 'track')
         text = 'Создание отменено'
-        markup = utils.gen_markup(utils.edit_menu)
+        markup = utils.gen_inl_markup(utils.edit_menu, main_message.message_id, "edit-menu", "Назад")
     else:
         rule = message.text
-        if ":" in rule or "_" in rule:
+        if len(rule) > 20:
+            text = 'Длина имени фильтра не должна превышать 20 знаков'
+        elif ":" in rule or "_" in rule:
             text = 'Использование символов \":\" и \"_\" в названии фильтра недопустимо'
         else:
             if rule not in utils.get_all_rules(message.chat.id):
@@ -48,7 +51,7 @@ def input_regex(message):
                        'https://devaka.ru/wp-content/uploads/2014/06/1599.png' % rule
             else:
                 text = 'Фильтр %s уже существует, выберите другое имя' % rule
-    bot.send_message(message.chat.id, text, reply_markup=markup)
+    bot.edit_message_text(chat_id=message.chat.id, text=text, message_id=main_message.message_id, reply_markup=markup)
 
 
 # Работа с текстом в режиме ввода регулярного выражения
@@ -57,11 +60,10 @@ def input_regex(message):
 def input_regex(message):
     if message.text == 'Отмена':
         rule = utils.get_mode(message.chat.id)
-        utils.toggle_mode(message.chat.id, 'edit')
+        utils.toggle_mode(message.chat.id, 'track')
         if rule in utils.get_new_rules(message.chat.id):
             utils.delete_rule(message.chat.id, rule, 'canceled')
         text = 'Изменение отменено'
-        markup = utils.gen_markup(utils.edit_menu)
     else:
         try:
             re.compile(message.text)
@@ -71,27 +73,27 @@ def input_regex(message):
         if is_valid is True:
             rule = utils.get_mode(message.chat.id)
             utils.edit_rule(message.chat.id, rule, message.text)
-            utils.toggle_mode(message.chat.id, 'edit')
+            utils.toggle_mode(message.chat.id, 'track')
             if rule in utils.get_new_rules(message.chat.id):
                 utils.delete_rule(message.chat.id, rule, 'new')
                 text = 'Фильтр %s успешно создан' % rule
             else:
                 text = 'Фильтр %s успешно изменен' % rule
-            markup = utils.gen_markup(utils.edit_menu)
         else:
             text = 'Некорректное регулярное выражение, введите корректное значение'
-            markup = None
-    bot.send_message(message.chat.id, text, reply_markup=markup)
+    bot.send_message(message.chat.id, text, reply_markup=utils.gen_markup(utils.start_menu))
+    main_message = bot.send_message(message.chat.id, '...')
+    markup = utils.gen_inl_markup(utils.edit_menu, main_message.message_id, "edit-menu", "Назад")
+    bot.edit_message_text(chat_id=message.chat.id, text='Выберите действие', message_id=main_message.message_id,
+                          reply_markup=markup)
 
 
 # Работа с текстом в режиме импорта фильтров
 @bot.message_handler(func=lambda message: utils.get_mode(message.chat.id) == 'import', content_types=["text"])
-def input_regex(message):
-    markup = utils.gen_markup(utils.edit_menu)
+def import_state(message):
     if message.text == 'Отмена':
-        utils.toggle_mode(message.chat.id, 'edit')
+        utils.toggle_mode(message.chat.id, 'track')
         text = 'Импорт отменен'
-        markup = utils.gen_markup(utils.edit_menu)
     else:
         import_data = message.text
         result = utils.import_rules(message.chat.id, import_data)
@@ -101,74 +103,77 @@ def input_regex(message):
                 text += '%s: %s\n' % (name, status)
         else:
             text = result
-        utils.toggle_mode(message.chat.id, 'edit')
+        utils.toggle_mode(message.chat.id, 'track')
+    bot.send_message(message.chat.id, text, reply_markup=utils.gen_markup(utils.start_menu))
+    main_message = bot.send_message(message.chat.id, '...')
+    markup = utils.gen_inl_markup(utils.edit_menu, main_message.message_id, "edit-menu", "Назад")
+    bot.edit_message_text(chat_id=message.chat.id, text='Выберите действие', message_id=main_message.message_id,
+                          reply_markup=markup)
 
-    bot.send_message(message.chat.id, text, reply_markup=markup)
+
+# Если хотим выбрать меню
+@bot.message_handler(func=lambda message: utils.get_mode(message.chat.id) in ['track', 'edit'], content_types=["text"])
+def print_menu(message):
+    if message.text == 'Меню':
+        main_message = bot.send_message(chat_id=message.chat.id, text="Выберите действие")
+        markup = utils.gen_inl_markup(utils.main_menu, main_message.message_id, "menu")
+        bot.edit_message_reply_markup(chat_id=message.chat.id, message_id=main_message.message_id, reply_markup=markup)
 
 
-# Работа с кнопками в режиме просмотра
-@bot.message_handler(func=lambda message: utils.get_mode(message.chat.id) == 'edit', content_types=["text"])
-def buttons(message):
+# Работа с кнопками в режиме настроек
+def edit_menu(chat_id, data):
+    action, message_id, menu = data.split('_')
     # Текст и кнопки по умолчанию
+    text = 'Неизвестная команда'
+    text2 = '...'
     markup = None
-    text = "..."
-    text2 = "..."
     # Печатаем сообщение которое будем изменять
-    request = bot.send_message(message.chat.id, text, reply_markup=markup)
     # Если хотим активировать фильтр
-    if message.text == 'Посмотреть фильтр':
-        markup = utils.gen_inl_markup('get_all_rules', message.chat.id, request.message_id, 'show', 'menu')
+    if menu == 'Посмотреть фильтр':
+        markup = utils.gen_inl_rules_markup('get_all_rules', chat_id, message_id, 'view', 'Режим настройки')
         if markup is None:
             text = "Нет доступных фильтров"
         else:
             text = "Выберите фильтр для просмотра"
 
     # Если хотим деактивировать фильтр
-    elif message.text == 'Добавить фильтр':
-        utils.toggle_mode(message.chat.id, 'input_name')
+    elif menu == 'Добавить фильтр':
+        utils.toggle_mode(chat_id, 'input_name')
         text = "Cоздание нового фильтра"
-        text2 = "Введите имя фильтра\n использование символов \":\" и \"_\" недопустимо"
+        text2 = "Введите имя фильтра (не более 20 символов)\n использование символов \":\" и \"_\" недопустимо"
 
     # Если хотим посмотреть активные фильры
-    elif message.text == 'Редактировать фильтр':
-        markup = utils.gen_inl_markup('get_all_rules', message.chat.id, request.message_id, 'edit', 'menu')
+    elif menu == 'Редактировать фильтр':
+        markup = utils.gen_inl_rules_markup('get_all_rules', chat_id, message_id, 'edit', 'Режим настройки')
         if markup is None:
             text = "Нет доступных фильтров"
         else:
             text = "Выберите фильтр для редактирования"
 
     # Если хотим посмотреть историю событий
-    elif message.text == 'Удалить фильтр':
-        markup = utils.gen_inl_markup('get_all_rules', message.chat.id, request.message_id, 'delete', 'menu')
+    elif menu == 'Удалить фильтр':
+        markup = utils.gen_inl_rules_markup('get_all_rules', chat_id, message_id, 'delete', 'Режим настройки')
         if markup is None:
             text = "Нет доступных подписок"
         else:
             text = "Выберите фильтр для удаления"
 
     # Если экспортировать свои фильтры
-    elif message.text == 'Экспорт':
+    elif menu == 'Экспорт':
         text = 'Данные для эскпорта:\n'
-        text += utils.export_rules(message.chat.id)
+        text += utils.export_rules(chat_id)
+        markup = utils.gen_inl_markup([], message_id, "edit-menu", "Режим настройки")
 
         # Если импортировать фильтры
-    elif message.text == 'Импорт':
+    elif menu == 'Импорт':
         text = 'Импорт фильтров'
         text2 = 'Введите данные для импорта в формате {"filer1":"regexp1","filter2":"regexp2"}'
-        utils.toggle_mode(message.chat.id, 'import')
+        utils.toggle_mode(chat_id, 'import')
 
-        # Если хотим выбрать меню
-    elif message.text == 'Меню':
-        markup = utils.gen_inl_buttons(utils.main_menu, request.message_id, "menu")
-        text = 'Выберите действие'
-
-    # Если не знаем кнопки, то ничего не делаем
-    else:
-        text = 'Неизвестная команда'
-    # Собираем сообщение и отправляем в чат
-    bot.edit_message_text(chat_id=request.chat.id, text=text,
-                          message_id=request.message_id, reply_markup=markup)
-    if message.text == 'Добавить фильтр' or message.text == 'Импорт':
-        bot.send_message(message.chat.id, text=text2, reply_markup=utils.gen_markup(utils.cancel))
+    bot.edit_message_text(chat_id=chat_id, text=text,
+                          message_id=message_id, reply_markup=markup)
+    if menu == 'Добавить фильтр' or menu == 'Импорт':
+        bot.send_message(chat_id, text=text2, reply_markup=utils.gen_markup(utils.cancel))
 
         # Работа с кнопками в режиме просмотра
 
@@ -181,16 +186,16 @@ def track_menu(chat_id, data):
     markup = None
     # Если хотим активировать фильтр
     if menu == 'Подписаться':
-        markup = utils.gen_inl_markup('get_inactive_rules', chat_id, message_id, 'control', 'track-menu')
-        if len(markup.to_dic()['inline_keyboard']) == 0:
+        markup = utils.gen_inl_rules_markup('get_inactive_rules', chat_id, message_id, 'control', 'Режим просмотра')
+        if len(markup.to_dic()['inline_keyboard']) == 1:
             text = "Нет доступных подписок"
         else:
             text = "Выберите подписку"
 
     # Если хотим деактивировать фильтр
     elif menu == 'Отписаться':
-        markup = utils.gen_inl_markup('get_active_rules', chat_id, message_id, 'control', 'track-menu')
-        if len(markup.to_dic()['inline_keyboard']) == 0:
+        markup = utils.gen_inl_rules_markup('get_active_rules', chat_id, message_id, 'control', 'Режим просмотра')
+        if len(markup.to_dic()['inline_keyboard']) == 1:
             text = "Нет активных подписок"
         else:
             text = "Выберите подписку"
@@ -199,6 +204,7 @@ def track_menu(chat_id, data):
     elif menu == 'Активные подписки':
         text = 'Активные подписки:\n'
         filters = utils.get_active_rules(chat_id)
+        markup = utils.gen_inl_markup([], message_id, "track-menu", "Режим просмотра")
         if len(filters) == 0:
             text = 'Нет активных подписок'
         else:
@@ -210,13 +216,9 @@ def track_menu(chat_id, data):
         markup = utils.get_counter(chat_id)
         if markup is False:
             text = "За последние сутки не произошло ни одного события"
+            markup = utils.gen_inl_markup([], message_id, "track-menu", "Режим просмотра")
         else:
             text = 'Статистика по всем фильтрам за последние 24 часа:\n'
-
-    # Если хотим выбрать меню
-    elif menu == 'Назад':
-        markup = utils.gen_inl_buttons(utils.main_menu, message_id, "menu")
-        text = 'Выберите действие'
 
     # Если не знаем кнопки, то ничего не делаем
     # Собираем сообщение и отправляем в чат
@@ -240,23 +242,23 @@ def get_filter(chat_id, data):
         if action == 'delete':
             text = utils.delete_rule(chat_id, rule, 'purged')
             text2 = 'Выберите фильтр для удаления'
-            markup = utils.gen_inl_markup('get_all_rules', chat_id, reply.message_id, action, 'edit-menu')
+            markup = utils.gen_inl_rules_markup('get_all_rules', chat_id, reply.message_id, action, 'Режим настройки')
         elif action == 'edit':
             markup = None
             if rule == 'Без категории':
                 text = 'Вы не можете редактировать значение фильтра по умолчанию'
-                utils.toggle_mode(chat_id, 'edit')
+                utils.toggle_mode(chat_id, 'track')
             else:
                 utils.toggle_mode(chat_id, rule)
-                text = "Редактирование фильтра %s\nТекущее значение:\n%s" % (
+                text2 = "Редактирование фильтра \"%s\"\n\nТекущее значение:\n%s" % (
                     rule, utils.get_rule_expr(chat_id, rule))
-                text2 = "Введите регулярное выражение\nhttps://devaka.ru/wp-content/uploads/2014/06/1599.png"
+                text = "Введите регулярное выражение\nhttps://devaka.ru/wp-content/uploads/2014/06/1599.png"
         else:
             text = "Фильтр %s:\n%s" % (rule, utils.get_rule_expr(chat_id, rule))
             text2 = 'Выберите фильтр для просмотра'
-            markup = utils.gen_inl_markup('get_all_rules', chat_id, reply.message_id, action, 'edit-menu')
+            markup = utils.gen_inl_rules_markup('get_all_rules', chat_id, reply.message_id, action, 'Режим настройки')
 
-        if action in ['show', 'delete']:
+        if action in ['view', 'delete']:
             bot.edit_message_text(chat_id=chat_id, text=text2,
                                   message_id=reply.message_id, reply_markup=markup)
 
@@ -288,7 +290,7 @@ def control_filter(chat_id, data):
             text = utils.subscribe(chat_id, rule)
             mark_func = 'get_inactive_rules'
             text2 = "Нет доступных подписок"
-        markup = utils.gen_inl_markup(mark_func, chat_id, reply.message_id, 'control', 'track-menu')
+        markup = utils.gen_inl_rules_markup(mark_func, chat_id, reply.message_id, 'control', 'Режим просмотра')
         if markup is not None:
             text2 = "Выберите подписку"
 
@@ -303,8 +305,8 @@ def control_filter(chat_id, data):
 
 # Обработка запросов на получение статистики:
 def get_stat(chat_id, data):
-    offset = int(data('_')[1])
-    rule = data('_')[2]
+    offset = int(data.split('_')[1])
+    rule = data.split('_')[2]
     alarms = utils.get_events_by_rule(chat_id, rule)
     raw_alarms = []
     for a in alarms:
@@ -328,10 +330,9 @@ def show_body(chat_id, data):
     # Извлекаем действие, id события и id сообщения для обновления
     action, message_id, event_id = str(data).split('_')
     message_id = int(message_id)
-    # Получаем имя фильтра по id сообщения
-    rule = utils.get_rule_by_id(chat_id, event_id)
     # Выгружаем из буфера сообщение с нужным id
     buffer = utils.from_buffer(chat_id, event_id)
+    print(buffer)
     # Если сообщение с искомым id еще находится в буфере, то формируем тело сообщение согласно action
     if buffer is not None:
         title = '%s\n%s' % (buffer["time"], buffer["title"])
@@ -339,10 +340,10 @@ def show_body(chat_id, data):
 
         if action == 'show':
             markup = utils.hide_event_data(event_id, message_id)
-            text = "<b>%s</b>\n%s\n%s" % (rule, title, body)
+            text = "%s\n%s" % (title, body)
         else:
             markup = utils.get_event_data(event_id, message_id)
-            text = "<b>%s</b>\n%s\n" % (rule, title)
+            text = "%s" % title
         bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, parse_mode='HTML',
                               reply_markup=markup)
     # Если сообщения было удалено из буфера, то генерим соответсвующий ответ
@@ -356,18 +357,20 @@ def show_menu(chat_id, data):
     text = '...'
     markup = None
     if menu == 'Режим просмотра':
-        markup = utils.gen_inl_buttons(utils.track_menu, message_id, "track-menu")
+        markup = utils.gen_inl_markup(utils.track_menu, message_id, "track-menu", "Назад")
         utils.toggle_mode(chat_id, 'track')
         text = 'Вы вошли в режим просмотра'
     elif menu == 'Режим настройки':
-        markup = utils.gen_inl_buttons(utils.edit_menu, message_id, "edit-menu")
-        utils.toggle_mode(chat_id, 'edit')
+        markup = utils.gen_inl_markup(utils.edit_menu, message_id, "edit-menu", "Назад")
+        utils.toggle_mode(chat_id, 'track')
         text = 'Вы вошли в режим редактирования'
-    elif menu == 'Сброс настроек':
-        utils.reset_user(chat_id)
-        text = "/start - начать работу с ботом"
-        rm_id = bot.send_message(chat_id, '...',reply_markup=telebot.types.ReplyKeyboardRemove(selective=False)).message_id
-        bot.delete_message(chat_id, rm_id)
+    elif menu == 'Сброс пользователя':
+        text = "Сброс повлечет за собой полное удаление всех настроенных фильтров и истории сообщений\n" \
+               "Вы уверены, что хотите произвести сброс?"
+        markup = utils.gen_inl_markup(utils.reset_menu, message_id, "reset")
+    elif menu == 'Назад':
+        markup = utils.gen_inl_markup(utils.main_menu, message_id, "menu")
+        text = 'Выберите действие'
     bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup)
     return
 
@@ -377,38 +380,51 @@ def show_menu(chat_id, data):
 def sort_call(call):
     action = str(call.data).split('_')[0]
     chat_id = call.message.chat.id
-    mode = utils.get_mode(chat_id)
-    print(call.data)
-    if mode == 'track':
-        if action in ['show', 'hide']:
-            show_body(chat_id, call.data)
-        elif action == 'stat':
-            get_stat(chat_id, call.data)
-        elif action == 'control':
-            control_filter(chat_id, call.data)
-        elif action == 'menu':
-            show_menu(chat_id, call.data)
-        elif action == 'track-menu':
-            track_menu(chat_id, call.data)
-    elif mode == 'edit':
-        if action in ['show', 'edit', 'delete']:
-            get_filter(chat_id, call.data)
-        elif action == 'menu':
-            show_menu(chat_id, call.data)
-        elif action == 'edit-menu':
-            track_menu(chat_id, call.data)
-
-
-# Отправляем заголовок сообщения в нужный чат
-def send_to_chat(chatid, title, event_id):
-    rule = utils.get_rule_by_id(chatid, event_id)
-    if utils.get_mode(chatid) != 'track':
-        return
-    text = "<b>%s</b>\n%s\n" % (rule, title)
-    first = bot.send_message(parse_mode='HTML', chat_id=chatid, text=text)
-    bot.edit_message_reply_markup(chat_id=chatid, message_id=first.message_id,
-                                  reply_markup=utils.get_event_data(id, first.message_id))
+    actions = {
+        'show': 'show_body',
+        'hide': 'show_body',
+        'stat': 'get_stat',
+        'control': 'control_filter',
+        'view': 'get_filter',
+        'edit': 'get_filter',
+        'delete': 'get_filter',
+        'menu': 'show_menu',
+        'track-menu': 'track_menu',
+        'edit-menu': 'edit_menu',
+        'reset': 'reset_user'
+    }
+    getattr(this, actions[action])(chat_id, call.data)
     return
+
+
+def send_to_chat(chat_id, title, event_id):
+    rule = utils.get_rule_by_id(chat_id, event_id)
+    if utils.get_mode(chat_id) not in 'track':
+        return
+    text = "%s\n" % title
+    first = bot.send_message(parse_mode='HTML', chat_id=chat_id, text=text)
+    bot.edit_message_reply_markup(chat_id=chat_id, message_id=first.message_id,
+                                  reply_markup=utils.get_event_data(event_id, first.message_id))
+    return
+
+
+def remove_markup(chat_id):
+    rm_id = bot.send_message(chat_id, '...',
+                             reply_markup=telebot.types.ReplyKeyboardRemove(selective=False)).message_id
+    bot.delete_message(chat_id, rm_id)
+
+
+def reset_user(chat_id, data):
+    action, message_id, choice = data.split('_')
+    markup = None
+    if choice == 'Да, я уверен':
+        utils.reset_user(chat_id)
+        text = "/start - начать работу с ботом"
+        remove_markup(chat_id)
+    else:
+        markup = utils.gen_inl_markup(utils.main_menu, message_id, "menu")
+        text = 'Выберите действие'
+    bot.edit_message_text(chat_id=chat_id, text=text, message_id=message_id, reply_markup=markup)
 
 
 # Функция для старта поллинга бота

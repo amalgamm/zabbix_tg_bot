@@ -22,10 +22,10 @@ r = redis.Redis(connection_pool=pool)
 qbus = Queue()
 
 start_menu = ["Меню"]
-track_menu = ["Подписаться", "Отписаться", "Активные подписки", "История событий", "Назад"]
-edit_menu = ["Посмотреть фильтр", "Добавить фильтр", "Редактировать фильтр", "Удалить фильтр", "Экспорт", "Импорт",
-             "Назад"]
-main_menu = ["Режим просмотра", "Режим настройки", "Сброс настроек"]
+track_menu = ["Подписаться", "Отписаться", "Активные подписки", "История событий"]
+edit_menu = ["Посмотреть фильтр", "Добавить фильтр", "Редактировать фильтр", "Удалить фильтр", "Экспорт", "Импорт"]
+main_menu = ["Режим просмотра", "Режим настройки", "Сброс пользователя"]
+reset_menu = ["Да, я уверен", "Нет"]
 cancel = ['Отмена']
 
 
@@ -37,18 +37,18 @@ class Parser(threading.Thread):
     def run(self):
         while True:
             queue_item = self._queue.get()
-
             # Обрабатываем событие
             chat_id, title, body = queue_item[0], queue_item[1], queue_item[2]
             # Определяем к какой группе относится событие
             rules = sort(chat_id, title, body)
-            for f in rules:
+            subscriptions = get_active_rules(chat_id)
+            active = list(set(subscriptions).intersection(rules))
+            event_ids = []
+            for rule in rules:
                 # Запмсываем в буфер, получаем идентификатор
-                event_id = to_buffer(chat_id, f, title, body)
-                # Для всех пользователей у кого активен фильтр отправляем сообщение
-                # for user in get_users():
-                if check_rule(chat_id, f) is True:
-                    send_to_chat(chat_id, title, event_id)
+                event_ids.append(to_buffer(chat_id, rule, title, "%s\n\n<b>Категории:\n%s</b>\n" % (body, active)))
+            if len(active) > 0:
+                send_to_chat(chat_id, title, event_ids[0])
             continue
 
 
@@ -62,15 +62,19 @@ def build_worker_pool(task, queue, size):
 
 
 # Сбрасываем все настройки пользователя
-def reset_user(chat_id):
-    for keys in r.keys("%s:*" % chat_id):
-        r.delete(keys)
+def reset_user(chat_id, complete=True):
+    if complete is True:
+        for keys in r.keys("%s:*" % chat_id):
+            r.delete(keys)
+    else:
+        for keys in r.keys("%s:active" % chat_id):
+            r.delete(keys)
     return
 
 
 # Переключаем режим пользователя
 def new_user(chat_id):
-    reset_user(chat_id)
+    reset_user(chat_id, False)
     toggle_mode(chat_id, 'track')
     r.set("%s:filters:Без категории" % chat_id, '')
     r.lpush("%s:active" % chat_id, 'Без категории')
@@ -134,7 +138,7 @@ def gen_markup(menu):
 
 
 # Генерим инлайн кнопки
-def gen_inl_buttons(menu, message_id, action):
+def gen_inl_markup(menu, message_id, action, back=None):
     markup = types.InlineKeyboardMarkup(row_width=2)
     row = []
     if isinstance(menu, dict):
@@ -144,17 +148,18 @@ def gen_inl_buttons(menu, message_id, action):
         for t in menu:
             row.append(types.InlineKeyboardButton(text=t, callback_data='%s_%s_%s' % (action, message_id, t)))
     markup.add(*row)
+    if back is not None:
+        markup.add(types.InlineKeyboardButton(text='Назад', callback_data='%s_%s_%s' % ('menu', message_id, back)))
     return markup
 
 
 # Генерим инлайн кнопками список нужных фильтров
-def gen_inl_markup(mark_func, chat_id, message_id, action, back=None):
+def gen_inl_rules_markup(mark_func, chat_id, message_id, action, back=None):
     # Получаем кнопки, которые надо сгенерить определенному пользователю
     rules = getattr(this, mark_func)(chat_id)
     # Генерим инлайн кнопки по списку
-    markup = gen_inl_buttons(rules, message_id, action)
-    if back is not None:
-        markup.add(types.InlineKeyboardButton(text='Назад', callback_data='%s_%s_%s' % (back, message_id,'Назад')))
+    markup = gen_inl_markup(rules, message_id, action, back)
+
     return markup
 
 
@@ -314,7 +319,9 @@ def import_rules(chat_id, import_data):
         return "Некорректный формат строки импорта"
     result = {}
     for name, regex in data.items():
-        if ":" in name or "_" in name:
+        if len(name) > 20:
+            text = 'Длина имени фильтра не должна превышать 20 знаков'
+        elif ":" in name or "_" in name:
             return 'Использование символов \":\" и \"_\" в названии фильтра недопустимо'
         if isinstance(regex, str):
             try:
