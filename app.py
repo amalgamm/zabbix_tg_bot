@@ -314,8 +314,9 @@ def get_stat(chat_id, data):
         buffer = utils.from_buffer(chat_id, event_id)
         buffer['id'] = event_id
         raw_alarms.append(buffer)
-    sorted_alarms = sorted(raw_alarms, key=itemgetter('time'), reverse=True)
+    sorted_alarms = sorted(raw_alarms, key=itemgetter('time'))
     for s in reversed(sorted_alarms[offset:offset + 5]):
+        print(s)
         title = '%s\n%s' % (s["time"], s["title"])
         send_to_chat(chat_id, title, s['id'])
     remains = len(sorted_alarms) - (offset + 5)

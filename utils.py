@@ -309,7 +309,7 @@ def export_rules(chat_id):
     export_data = {}
     for f in rules:
         export_data[f] = get_rule_expr(chat_id, f)
-    return json.dmps(export_data)
+    return json.dumps(export_data)
 
 
 def import_rules(chat_id, import_data):
